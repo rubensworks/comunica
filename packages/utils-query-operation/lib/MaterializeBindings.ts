@@ -4,8 +4,8 @@ import type * as RDF from '@rdfjs/types';
 import type { Variable } from 'rdf-data-factory';
 import { termToString } from 'rdf-string';
 import { mapTermsNested, someTermsNested } from 'rdf-terms';
-import type { Algebra, Factory } from 'sparqlalgebrajs';
-import { Util } from 'sparqlalgebrajs';
+import type { Factory } from 'sparqlalgebrajs';
+import { Algebra, Util } from 'sparqlalgebrajs';
 
 /**
  * Materialize a term with the given binding.
@@ -92,7 +92,7 @@ export function materializeOperation(
         ), { metadata: op.metadata }),
       };
     },
-    extend(op: Algebra.Extend) {
+    extend(op: Algebra.Extend, factory: Factory) {
       // Materialize an extend operation.
       // If strictTargetVariables is true, we throw if the extension target variable is attempted to be bound.
       // Otherwise, we remove the extend operation.
@@ -106,9 +106,29 @@ export function materializeOperation(
           };
         }
       }
+      let recursionResult: Algebra.Operation = materializeOperation(
+        op.input,
+        bindings,
+        algebraFactory,
+        bindingsFactory,
+        options,
+      );
+
+      // Join op.input with a values clause containing the variables that are in InitialBindings and
+      // are used in the current extend operation.
+      const inScopeVariables = [ op.variable ];
+      if (op.expression.expressionType === Algebra.expressionTypes.TERM && op.expression.term.termType === 'Variable') {
+        inScopeVariables.push(op.expression.term);
+      }
+      const values: Algebra.Operation =
+        createValuesFromBindings(factory, <Bindings> options.originalBindings, inScopeVariables);
+      if (values.bindings.length > 0) {
+        recursionResult = factory.createJoin([ values, recursionResult ]);
+      }
       return {
-        recurse: true,
-        result: op,
+        recurse: false,
+        result: factory.createExtend(recursionResult, op.variable, <Algebra.Expression>
+          materializeOperation(op.expression, bindings, algebraFactory, bindingsFactory, options)),
       };
     },
     group(op: Algebra.Group, factory: Factory) {
@@ -146,7 +166,7 @@ export function materializeOperation(
       }
 
       // Make a values clause using all the variables from originalBindings.
-      const values: Algebra.Operation[] = createValuesFromBindings(factory, originalBindings);
+      const values: Algebra.Operation = createValuesFromBindings(factory, originalBindings);
 
       // Recursively materialize the filter expression
       const recursionResultExpression: Algebra.Expression = <Algebra.Expression> materializeOperation(
@@ -166,8 +186,8 @@ export function materializeOperation(
         options,
       );
 
-      if (values.length > 0) {
-        recursionResultInput = factory.createJoin([ ...values, recursionResultInput ]);
+      if (values.bindings.length > 0) {
+        recursionResultInput = factory.createJoin([ values, recursionResultInput ]);
       }
 
       return {
@@ -205,7 +225,7 @@ export function materializeOperation(
 
       // Find projected variables which are present in the originalBindings.
       // This will result in projected variables being handled via a values clause.
-      const values: Algebra.Operation[] =
+      const values: Algebra.Operation =
       createValuesFromBindings(factory, <Bindings> options.originalBindings, op.variables);
 
       let recursionResult: Algebra.Operation = materializeOperation(
@@ -216,8 +236,8 @@ export function materializeOperation(
         options,
       );
 
-      if (values.length > 0) {
-        recursionResult = factory.createJoin([ ...values, recursionResult ]);
+      if (values.bindings.length > 0) {
+        recursionResult = factory.createJoin([ values, recursionResult ]);
       }
 
       return {
@@ -329,16 +349,14 @@ export function materializeOperation(
  * @param {Variable[]} variables A list of variables.
  * @returns Algebra.Values A new values operation the given bindings.
  */
-function createValuesFromBindings(factory: Factory, bindings: Bindings, variables?: Variable[]): Algebra.Values[] {
-  const values: Algebra.Values[] = [];
-
-  for (const [ variable, binding ] of bindings) {
-    if (!variables || variables.some(v => v.equals(variable))) {
-      const newBinding = { [termToString(variable)]: <RDF.NamedNode | RDF.Literal> binding };
-
-      values.push(factory.createValues([ variable ], [ newBinding ]));
-    }
+function createValuesFromBindings(factory: Factory, bindings: Bindings, variables?: Variable[]): Algebra.Values {
+  const filteredVariables = variables ? variables.filter(variable => bindings.has(variable)) : [ ...bindings.keys() ];
+  if (filteredVariables.length === 0) {
+    return factory.createValues([], []);
   }
-
-  return values;
+  const bindingRecord: Record<string, RDF.Literal | RDF.NamedNode> = {};
+  for (const variable of filteredVariables) {
+    bindingRecord[termToString(variable)] = <RDF.Literal | RDF.NamedNode> bindings.get(variable)!;
+  }
+  return factory.createValues(filteredVariables, [ bindingRecord ]);
 }

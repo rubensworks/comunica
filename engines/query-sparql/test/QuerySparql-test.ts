@@ -894,6 +894,209 @@ SELECT ?obsId {
         expect(bindings2).toMatchObject(expectedResult);
       });
     });
+
+    describe('initialBindings', () => {
+      let initialBindings: Bindings;
+      let sourcesValue1: string;
+
+      beforeEach(() => {
+        initialBindings = BF.bindings([
+          [ DF.variable('a'), DF.namedNode('http://example.org/test#testBinding') ],
+        ]);
+        sourcesValue1 = `
+          @prefix ex: <http://example.org/test#> .
+          
+          ex:testBinding
+            ex:property "testProperty" .
+          `;
+      });
+
+      it('should consider the initialbindings in the bound function', async() => {
+        const context: QueryStringContext = {
+          sources: [
+            {
+              type: 'serialized',
+              value: sourcesValue1,
+              mediaType: 'text/turtle',
+            },
+          ],
+          initialBindings,
+        };
+
+        const expectedResult: Bindings[] = [
+          BF.bindings([
+            [ DF.variable('a'), DF.namedNode('http://example.org/test#testBinding') ],
+          ]),
+        ];
+
+        const bindings = (await engine.queryBindings(`
+        PREFIX ex: <http://example.org/test#>
+        
+        SELECT $a WHERE {
+          {
+            FILTER (bound($a))
+          }
+          $a ex:property "testProperty" .
+          FILTER (bound($a)) .
+        }
+          `, context));
+
+        await expect(bindings).toEqualBindingsStream(expectedResult);
+      });
+
+      it('should consider the initialbindings in the filter function', async() => {
+        const context: QueryStringContext = {
+          sources: [
+            {
+              type: 'serialized',
+              value: sourcesValue1,
+              mediaType: 'text/turtle',
+            },
+          ],
+          initialBindings,
+        };
+
+        const expectedResult: Bindings[] = [
+          BF.bindings([
+            [ DF.variable('a'), DF.namedNode('http://example.org/test#testBinding') ],
+          ]),
+        ];
+
+        const bindings = (await engine.queryBindings(`
+        PREFIX ex: <http://example.org/test#>
+      
+        SELECT $a WHERE {
+          {
+            SELECT * WHERE {
+              FILTER ($a = ex:testBinding) .
+            }
+          }
+        }
+        `, context));
+
+        await expect(bindings).toEqualBindingsStream(expectedResult);
+      });
+
+      it('should consider the initialbindings in the filter function 2', async() => {
+        const context: QueryStringContext = {
+          sources: [
+            {
+              type: 'serialized',
+              value: sourcesValue1,
+              mediaType: 'text/turtle',
+            },
+          ],
+          initialBindings,
+        };
+
+        const expectedResult: Bindings[] = [
+          BF.bindings([
+            [ DF.variable('a'), DF.namedNode('http://example.org/test#testBinding') ],
+          ]),
+        ];
+
+        const bindings = (await engine.queryBindings(`
+        PREFIX ex: <http://example.org/test#>
+      
+        SELECT $a WHERE {
+          {
+            SELECT $a WHERE {
+              FILTER ($a = ex:testBinding) .
+            }
+          }
+        }
+        `, context));
+
+        await expect(bindings).toEqualBindingsStream(expectedResult);
+      });
+
+      it('should consider initialbindings which are not projected', async() => {
+        const initialBindings = BF.bindings([
+          [ DF.variable('predicate'), DF.namedNode('http://example.org/test#predicateEx') ],
+          [ DF.variable('subject'), DF.namedNode('http://example.org/test#subjectEx') ],
+        ]);
+
+        const context: QueryStringContext = {
+          sources: [
+            {
+              type: 'serialized',
+              value: `
+                @prefix ex: <http://example.org/test#> .
+                @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+                        
+                ex:subjectEx
+                    rdf:type ex:Type ;
+                    ex:predicateEx "Predicate"@de ;
+                .`,
+              mediaType: 'text/turtle',
+            },
+          ],
+          initialBindings,
+        };
+
+        const bindings = (await engine.queryBindings(`
+        SELECT $subject ?value WHERE {
+          $subject $predicate ?value .
+          FILTER (!isLiteral(?value) || !langMatches(lang(?value), "de"))
+        }`, context));
+
+        await expect(bindings).toEqualBindingsStream([]);
+      });
+
+      it('should consider initialbindings in the extend operation', async() => {
+        const initialBindings = BF.bindings([
+          [ DF.variable('initialBindingsVariable'), DF.namedNode('http://example.org/test#InitialBindingsValue') ],
+        ]);
+
+        const context: QueryStringContext = {
+          sources: [
+            {
+              type: 'serialized',
+              value: ``,
+              mediaType: 'text/turtle',
+            },
+          ],
+          initialBindings,
+        };
+
+        const bindings = (await engine.queryBindings(`
+        PREFIX ex: <http://example.org/test#>
+        
+        SELECT $initialBindingsVariable
+        \tWHERE {
+        \t\tBIND ($initialBindingsVariable AS ?b) .
+        \t\tFILTER (?b = ex:InitialBindingsValue) .
+        \t}`, context));
+
+        const expectedResult: Bindings[] = [
+          BF.bindings([
+            [ DF.variable('initialBindingsVariable'), DF.namedNode('http://example.org/test#InitialBindingsValue') ],
+          ]),
+        ];
+
+        await expect(bindings).toEqualBindingsStream(expectedResult);
+      });
+
+      it('should not overwrite initialbindings', async() => {
+        const context: QueryStringContext = {
+          sources: [
+            {
+              type: 'serialized',
+              value: ``,
+              mediaType: 'text/turtle',
+            },
+          ],
+          initialBindings,
+        };
+
+        // Reject for existing graph
+        await expect(engine.queryBindings(`
+          SELECT $a
+          WHERE {
+            BIND (true AS $a) .
+          }`, context)).rejects.toThrow('Illegal binding to variable \'a\' that has already been bound');
+      });
+    });
   });
 
   // We skip these tests in browsers due to CORS issues
