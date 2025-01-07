@@ -46,6 +46,6 @@
   },
   "dependencies": {
     "@comunica/types": "^4.0.2",
-    "immutable": "^4.3.7"
+    "immutable": "^5.0.0"
   }
 }
