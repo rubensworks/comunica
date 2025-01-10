@@ -1,0 +1,49 @@
+{
+  "name": "@comunica/actor-rdf-metadata-extract-void",
+  "version": "4.0.2",
+  "description": "Comunica RDF metadata extract actor that parses VoID dataset descriptions",
+  "license": "MIT",
+  "homepage": "https://comunica.dev/",
+  "lsd:module": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/comunica/comunica.git",
+    "directory": "packages/actor-rdf-metadata-extract-void"
+  },
+  "bugs": {
+    "url": "https://github.com/comunica/comunica/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "comunica",
+    "actor",
+    "rdf-metadata-extract",
+    "void"
+  ],
+  "sideEffects": false,
+  "main": "lib/index.js",
+  "typings": "lib/index",
+  "files": [
+    "components",
+    "lib/**/*.d.ts",
+    "lib/**/*.js",
+    "lib/**/*.js.map"
+  ],
+  "scripts": {
+    "build": "npm run build:ts && npm run build:components",
+    "build:ts": "node \"../../node_modules/typescript/bin/tsc\"",
+    "build:components": "componentsjs-generator"
+  },
+  "dependencies": {
+    "@comunica/actor-init-query": "^4.0.0",
+    "@comunica/bus-rdf-metadata-extract": "^4.0.0",
+    "@comunica/core": "^4.0.0",
+    "@rdfjs/types": "*",
+    "lru-cache": "^10.0.0",
+    "rdf-stores": "^1.0.0",
+    "rdf-string-ttl": "^1.3.2",
+    "sparqlalgebrajs": "^4.3.8"
+  }
+}
