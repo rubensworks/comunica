@@ -244,15 +244,25 @@ TS
     if (partialMetadata.cardinality) {
       cardinalityJoined = partialMetadata.cardinality;
     } else {
+      let hasZeroCardinality = false;
       cardinalityJoined = metadatas
         .reduce((acc: RDF.QueryResultCardinality, metadata) => {
           const cardinalityThis = ActorRdfJoin.getCardinality(metadata);
+          if (cardinalityThis.value === 0) {
+            hasZeroCardinality = true;
+          }
           return {
             type: cardinalityThis.type === 'estimate' ? 'estimate' : acc.type,
             value: acc.value * (optional ? Math.max(1, cardinalityThis.value) : cardinalityThis.value),
           };
         }, { type: 'exact', value: 1 });
-      cardinalityJoined.value *= (await this.mediatorJoinSelectivity.mediate({ entries, context })).selectivity;
+      // The cardinality should only be zero if one of the entries has zero cardinality, not due to float overflow
+      if (!hasZeroCardinality) {
+        cardinalityJoined.value *= (await this.mediatorJoinSelectivity.mediate({ entries, context })).selectivity;
+        if (cardinalityJoined.value === 0) {
+          cardinalityJoined.value = Number.MIN_VALUE;
+        }
+      }
     }
 
     return {
