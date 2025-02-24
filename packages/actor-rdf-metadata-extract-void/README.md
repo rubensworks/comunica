@@ -38,7 +38,3 @@ After installing, this package can be added to your engine's configuration as fo
   ]
 }
 ```
-
-### Config Parameters
-
-* `bindingsCacheSize`: How many bindings should be cached internally for cardinality estimation per dataset, defaults to `10`.

@@ -1,9 +1,26 @@
+import { createReadStream } from 'node:fs';
+import { join } from 'node:path';
 import { ActorInitQuery } from '@comunica/actor-init-query';
 import { Bus } from '@comunica/core';
-import arrayifyStream from 'arrayify-stream';
+import type { IDataset } from '@comunica/types';
+import { StreamParser } from 'n3';
 import { DataFactory } from 'rdf-data-factory';
+import { Factory } from 'sparqlalgebrajs';
 import { ActorRdfMetadataExtractVoid } from '../lib/ActorRdfMetadataExtractVoid';
 import '@comunica/utils-jest';
+import {
+  RDF_TYPE,
+  VOID_CLASS,
+  VOID_CLASS_PARTITION,
+  VOID_CLASSES,
+  VOID_DATASET,
+  VOID_ENTITIES,
+  VOID_PROPERTY,
+  VOID_PROPERTY_PARTITION,
+  VOID_TRIPLES,
+  VOID_URI_REGEX_PATTERN,
+  VOID_URI_SPACE,
+} from '../lib/Definitions';
 
 const streamifyArray = require('streamify-array');
 
@@ -11,6 +28,7 @@ jest.mock('@comunica/actor-init-query');
 jest.mock('@comunica/bus-rdf-metadata-extract');
 
 const DF = new DataFactory();
+const AF = new Factory(DF);
 
 describe('ActorRdfMetadataExtractVoid', () => {
   let bus: any;
@@ -25,13 +43,7 @@ describe('ActorRdfMetadataExtractVoid', () => {
       bus,
       name: 'actor',
       actorInitQuery,
-      queryCacheSize: 1,
     });
-    (<any>actor).queryEngine = {
-      queryBindings: () => {
-        throw new Error('queryBindings called without mocking');
-      },
-    };
   });
 
   describe('test', () => {
@@ -41,90 +53,111 @@ describe('ActorRdfMetadataExtractVoid', () => {
   });
 
   describe('run', () => {
-    it('should return collected datasets', async() => {
-      jest.spyOn(actor, 'collectFromMetadata').mockResolvedValue(<any>'store');
-      jest.spyOn(actor, 'getDatasets').mockResolvedValue([ <any>'dataset' ]);
-      await expect(actor.run(<any>{})).resolves.toEqual({ metadata: { datasets: [ 'dataset' ]}});
+    it('should handle empty metadata stream', async() => {
+      const url = 'http://localhost:3000/sparql';
+      const metadata = streamifyArray([]);
+      await expect(actor.run(<any>{ metadata, url })).resolves.toEqual({ metadata: {}});
     });
 
-    it('should return empty metadata without datasets', async() => {
-      jest.spyOn(actor, 'collectFromMetadata').mockResolvedValue(<any>'store');
-      jest.spyOn(actor, 'getDatasets').mockResolvedValue([]);
-      await expect(actor.run(<any>{})).resolves.toEqual({ metadata: {}});
-    });
-  });
-
-  describe('collectFromMetadata', () => {
-    it('should collect only relevant quads', async() => {
-      const stream = streamifyArray([
-        DF.quad(DF.blankNode(), DF.namedNode(`${ActorRdfMetadataExtractVoid.VOID}triples`), DF.literal('0')),
-        DF.quad(DF.blankNode(), DF.namedNode(`${ActorRdfMetadataExtractVoid.SPARQL_SD}feature`), DF.literal('f')),
-        DF.quad(DF.blankNode(), DF.namedNode('ex:p'), DF.literal('o')),
+    it('should ignore descriptions without triple count', async() => {
+      const url = 'http://localhost:3000/sparql';
+      const dataset = DF.namedNode(url);
+      const metadata = streamifyArray([
+        DF.quad(dataset, DF.namedNode(RDF_TYPE), DF.namedNode(VOID_DATASET)),
       ]);
-      const store = await actor.collectFromMetadata(stream);
-      const output = await arrayifyStream(store.match());
-      expect(output).toHaveLength(2);
+      await expect(actor.run(<any>{ metadata, url })).resolves.toEqual({ metadata: {}});
     });
-  });
 
-  describe('getDatasets', () => {
-    it('should execute correctly', async() => {
-      const sourceUrl = 'ex:void';
-      const b1 = {
-        data: { identifier: DF.namedNode('ex:d1'), triples: DF.literal('123'), uriRegexPattern: DF.literal('^ex:') },
-        get: (key: string) => (<any>b1.data)[key],
-        has: (key: string) => key in b1.data,
-      };
-      const b2 = {
-        data: { identifier: DF.namedNode('ex:d2'), triples: DF.literal('123'), uriSpace: DF.literal('ex:') },
-        get: (key: string) => (<any>b2.data)[key],
-        has: (key: string) => key in b2.data,
-      };
-      const b3 = {
-        data: { identifier: DF.namedNode('ex:d3'), triples: DF.literal('123') },
-        get: (key: string) => (<any>b3.data)[key],
-        has: (key: string) => key in b3.data,
-      };
-      const b4 = {
-        data: { identifier: DF.blankNode(), triples: DF.literal('123') },
-        get: (key: string) => (<any>b4.data)[key],
-        has: (key: string) => key in b4.data,
-      };
-      jest.spyOn((<any>actor).queryEngine, 'queryBindings').mockResolvedValue(streamifyArray([ b1, b2, b3, b4 ]));
-      jest.spyOn(actor, 'getVocabularies').mockResolvedValue(undefined);
-      const datasets = await actor.getDatasets(<any>{}, sourceUrl);
-      expect(datasets).toEqual([
-        expect.objectContaining({
-          identifier: b1.data.identifier,
-          source: sourceUrl,
-        }),
-        expect.objectContaining({
-          identifier: b2.data.identifier,
-          source: sourceUrl,
-        }),
-        expect.objectContaining({
-          identifier: b3.data.identifier,
-          source: sourceUrl,
-        }),
-        expect.objectContaining({
-          identifier: b4.data.identifier,
-          source: sourceUrl,
-        }),
+    it('should ignore descriptions without class or property partitions', async() => {
+      const url = 'http://localhost:3000/sparql';
+      const dataset = DF.namedNode(url);
+      const metadata = streamifyArray([
+        DF.quad(dataset, DF.namedNode(RDF_TYPE), DF.namedNode(VOID_DATASET)),
+        DF.quad(dataset, DF.namedNode(VOID_TRIPLES), DF.literal('1234')),
       ]);
-    });
-  });
-
-  describe('getVocabularies', () => {
-    it('should return vocabularies when present', async() => {
-      jest.spyOn((<any>actor).queryEngine, 'queryBindings').mockResolvedValue(streamifyArray([
-        { get: () => ({ value: 'v' }) },
-      ]));
-      await expect(actor.getVocabularies(<any>{}, <any>{})).resolves.toEqual([ 'v' ]);
+      await expect(actor.run(<any>{ metadata, url })).resolves.toEqual({ metadata: {}});
     });
 
-    it('should return undefined when no vocabularies are present', async() => {
-      jest.spyOn((<any>actor).queryEngine, 'queryBindings').mockResolvedValue(streamifyArray([]));
-      await expect(actor.getVocabularies(<any>{}, <any>{})).resolves.toBeUndefined();
+    it('should handle descriptions with property partitions', async() => {
+      const url = 'http://localhost:3000/sparql';
+      const dataset = DF.namedNode(url);
+      const propertyUri = DF.namedNode('ex:p');
+      const propertyPartition = DF.blankNode();
+      const propertyPartitionTriples = 5724;
+      const metadata = streamifyArray([
+        DF.quad(dataset, DF.namedNode(RDF_TYPE), DF.namedNode(VOID_DATASET)),
+        DF.quad(dataset, DF.namedNode(VOID_TRIPLES), DF.literal('1234')),
+        DF.quad(dataset, DF.namedNode(VOID_PROPERTY_PARTITION), propertyPartition),
+        DF.quad(dataset, DF.namedNode(VOID_URI_SPACE), DF.literal('http://localhost:3000/')),
+        DF.quad(dataset, DF.namedNode(VOID_URI_REGEX_PATTERN), DF.literal('^http://localhost:3000/.*')),
+        DF.quad(propertyPartition, DF.namedNode(VOID_PROPERTY), propertyUri),
+        DF.quad(propertyPartition, DF.namedNode(VOID_TRIPLES), DF.literal(propertyPartitionTriples.toString())),
+      ]);
+      const output = actor.run(<any>{ metadata, url });
+      await expect(output).resolves.toEqual({ metadata: { datasets: [
+        { getCardinality: expect.any(Function), source: url, uri: url },
+      ]}});
+      // Test the cardinality estimation part to make sure that function also works.
+      const extractedDataset: IDataset = (await output).metadata.datasets[0];
+      const pattern = AF.createPattern(DF.variable('s'), propertyUri, DF.variable('o'));
+      await expect(extractedDataset.getCardinality(pattern)).resolves.toEqual({
+        type: 'estimate',
+        value: propertyPartitionTriples,
+        dataset: url,
+      });
+    });
+
+    it('should handle descriptions with class partitions', async() => {
+      const url = 'http://localhost:3000/sparql';
+      const dataset = DF.namedNode(url);
+      const classUri = DF.namedNode('ex:C');
+      const classPartition = DF.blankNode();
+      const classPartitionEntities = 4321;
+      const metadata = streamifyArray([
+        DF.quad(dataset, DF.namedNode(RDF_TYPE), DF.namedNode(VOID_DATASET)),
+        DF.quad(dataset, DF.namedNode(VOID_TRIPLES), DF.literal('1234')),
+        DF.quad(dataset, DF.namedNode(VOID_CLASSES), DF.literal('4567')),
+        DF.quad(dataset, DF.namedNode(VOID_CLASS_PARTITION), classPartition),
+        DF.quad(dataset, DF.namedNode(VOID_URI_SPACE), DF.literal('http://localhost:3000/')),
+        DF.quad(dataset, DF.namedNode(VOID_URI_REGEX_PATTERN), DF.literal('^http://localhost:3000/.*')),
+        DF.quad(classPartition, DF.namedNode(VOID_ENTITIES), DF.literal(classPartitionEntities.toString())),
+        DF.quad(classPartition, DF.namedNode(VOID_CLASS), classUri),
+      ]);
+      const output = actor.run(<any>{ metadata, url });
+      await expect(output).resolves.toEqual({ metadata: { datasets: [
+        { getCardinality: expect.any(Function), source: url, uri: url },
+      ]}});
+      // Test the cardinality estimation part to make sure that function also works.
+      const extractedDataset: IDataset = (await output).metadata.datasets[0];
+      const pattern = AF.createPattern(DF.variable('s'), DF.namedNode(RDF_TYPE), classUri);
+      await expect(extractedDataset.getCardinality(pattern)).resolves.toEqual({
+        type: 'estimate',
+        value: classPartitionEntities,
+        dataset: url,
+      });
+    });
+
+    it('should handle Wikidata SPARQL Service Description', async() => {
+      const url = 'http://query.wikidata.org/bigdata/namespace/wdq/sparql';
+      const stream = createReadStream(join(__dirname, 'descriptions', 'wikidata.nt'));
+      const parser = new StreamParser();
+      const metadata = stream.pipe(parser);
+      await expect(actor.run(<any>{ metadata, url })).resolves.toEqual({ metadata: { datasets: [
+        { getCardinality: expect.any(Function), source: url, uri: 'b0_defaultGraph' },
+      ]}});
+    });
+
+    it('should handle Rhea SPARQL Service Description', async() => {
+      const url = 'https://sparql.rhea-db.org/sparql';
+      const stream = createReadStream(join(__dirname, 'descriptions', 'rhea-db.nt'));
+      const parser = new StreamParser();
+      const metadata = stream.pipe(parser);
+      await expect(actor.run(<any>{ metadata, url })).resolves.toEqual({ metadata: { datasets: [
+        { getCardinality: expect.any(Function), source: url, uri: 'https://sparql.rhea-db.org/.well-known/void#_graph_chebi' },
+        { getCardinality: expect.any(Function), source: url, uri: 'https://sparql.rhea-db.org/.well-known/void#_graph_rhea' },
+        { getCardinality: expect.any(Function), source: url, uri: 'https://sparql.rhea-db.org/.well-known/void#_graph_void' },
+        { getCardinality: expect.any(Function), source: url, uri: 'https://sparql.rhea-db.org/.well-known/void#_graph_sparql-examples' },
+      ]}});
     });
   });
 });

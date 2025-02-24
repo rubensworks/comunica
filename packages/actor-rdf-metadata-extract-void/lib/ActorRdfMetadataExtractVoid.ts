@@ -1,5 +1,4 @@
 import type { ActorInitQueryBase } from '@comunica/actor-init-query';
-import { QueryEngineBase } from '@comunica/actor-init-query';
 import type {
   IActionRdfMetadataExtract,
   IActorRdfMetadataExtractOutput,
@@ -8,26 +7,43 @@ import type {
 import { ActorRdfMetadataExtract } from '@comunica/bus-rdf-metadata-extract';
 import type { IActorTest, TestResult } from '@comunica/core';
 import { passTestVoid } from '@comunica/core';
-import type { IDataset } from '@comunica/types';
+import type { IDataset, QueryResultCardinality } from '@comunica/types';
 import type * as RDF from '@rdfjs/types';
-import { RdfStore } from 'rdf-stores';
-import { termToString } from 'rdf-string-ttl';
-import { VoidDataset } from './VoidDataset';
+import type { Algebra } from 'sparqlalgebrajs';
+import {
+  RDF_TYPE,
+  SD_DEFAULT_DATASET,
+  SD_DEFAULT_GRAPH,
+  SD_FEATURE,
+  SD_GRAPH,
+  SD_UNION_DEFAULT_GRAPH,
+  VOID_CLASS,
+  VOID_CLASS_PARTITION,
+  VOID_CLASSES,
+  VOID_DATASET,
+  VOID_DISTINCT_OBJECTS,
+  VOID_DISTINCT_SUBJECTS,
+  VOID_ENTITIES,
+  VOID_PROPERTY,
+  VOID_PROPERTY_PARTITION,
+  VOID_TRIPLES,
+  VOID_URI_REGEX_PATTERN,
+  VOID_URI_SPACE,
+  VOID_VOCABULARY,
+} from './Definitions';
+import { getCardinality } from './Estimators';
+import type {
+  IVoidClassPartition,
+  IVoidDataset,
+  IVoidPropertyPartition,
+} from './Types';
 
 /**
  * A comunica Void RDF Metadata Extract Actor.
  */
 export class ActorRdfMetadataExtractVoid extends ActorRdfMetadataExtract {
-  private readonly queryEngine: QueryEngineBase;
-  private readonly queryCacheSize: number;
-
-  public static readonly VOID = 'http://rdfs.org/ns/void#';
-  public static readonly SPARQL_SD = 'http://www.w3.org/ns/sparql-service-description#';
-
   public constructor(args: IActorRdfMetadataExtractVoidArgs) {
     super(args);
-    this.queryEngine = new QueryEngineBase(args.actorInitQuery);
-    this.queryCacheSize = args.queryCacheSize;
   }
 
   public async test(_action: IActionRdfMetadataExtract): Promise<TestResult<IActorTest>> {
@@ -35,120 +51,185 @@ export class ActorRdfMetadataExtractVoid extends ActorRdfMetadataExtract {
   }
 
   public async run(action: IActionRdfMetadataExtract): Promise<IActorRdfMetadataExtractOutput> {
-    const store = await this.collectFromMetadata(action.metadata);
-    const datasets = await this.getDatasets(store, action.url);
-    const metadata = datasets.length > 0 ? { datasets } : {};
-    return { metadata };
-  }
+    return new Promise<IActorRdfMetadataExtractOutput>((resolve, reject) => {
+      // Track the URIs of identified datasets to extract
+      const datasetUris = new Set<string>();
 
-  /**
-   * Collect all the VoID-related quads from the metadata stream.
-   * The purpose of this is to avoid storing unrelated data present in the metadata stream.
-   * @param {RDF.Stream} stream The metadata Quad stream.
-   * @returns {RDF.Store} An RDF/JS in-memory store containing all the VoID-related quads.
-   */
-  public async collectFromMetadata(stream: RDF.Stream): Promise<RDF.Store> {
-    return new Promise<RDF.Store>((resolve, reject) => {
-      const store = RdfStore.createDefault();
-      stream
+      // Track the other stats per-URI to allow arbitrary triple ordering in the stream
+      const triples: Record<string, number> = {};
+      const entities: Record<string, number> = {};
+      const vocabularies: Record<string, string[]> = {};
+      const classes: Record<string, number> = {};
+      const distinctObjects: Record<string, number> = {};
+      const distinctSubjects: Record<string, number> = {};
+      const uriRegexPatterns: Record<string, RegExp> = {};
+      const propertyPartitions: Record<string, string[]> = {};
+      const propertyPartitionProperties: Record<string, string> = {};
+      const classPartitions: Record<string, string[]> = {};
+      const classPartitionClasses: Record<string, string> = {};
+
+      // Default dataset and graph to remove in case of sd:UnionDefaultGraph
+      let defaultDatasetUri: string | undefined;
+      let defaultGraphUri: string | undefined;
+      let unionDefaultGraph = false;
+
+      action.metadata
         .on('error', reject)
-        .on('end', () => resolve(store))
         .on('data', (quad: RDF.Quad) => {
-          if (
-            quad.predicate.value.startsWith(ActorRdfMetadataExtractVoid.VOID) ||
-            quad.predicate.value.startsWith(ActorRdfMetadataExtractVoid.SPARQL_SD) ||
-            quad.object.value.startsWith(ActorRdfMetadataExtractVoid.VOID) ||
-            quad.object.value.startsWith(ActorRdfMetadataExtractVoid.SPARQL_SD)
-          ) {
-            store.addQuad(quad);
+          switch (quad.predicate.value) {
+            case RDF_TYPE:
+              if (quad.object.value === SD_GRAPH || quad.object.value === VOID_DATASET) {
+                datasetUris.add(quad.subject.value);
+              }
+              break;
+            case VOID_TRIPLES:
+              triples[quad.subject.value] = Number.parseInt(quad.object.value, 10);
+              break;
+            case VOID_ENTITIES:
+              entities[quad.subject.value] = Number.parseInt(quad.object.value, 10);
+              break;
+            case VOID_CLASSES:
+              classes[quad.subject.value] = Number.parseInt(quad.object.value, 10);
+              break;
+            case VOID_CLASS:
+              classPartitionClasses[quad.subject.value] = quad.object.value;
+              break;
+            case VOID_PROPERTY:
+              propertyPartitionProperties[quad.subject.value] = quad.object.value;
+              break;
+            case VOID_DISTINCT_OBJECTS:
+              distinctObjects[quad.subject.value] = Number.parseInt(quad.object.value, 10);
+              break;
+            case VOID_DISTINCT_SUBJECTS:
+              distinctSubjects[quad.subject.value] = Number.parseInt(quad.object.value, 10);
+              break;
+            case VOID_VOCABULARY:
+              if (vocabularies[quad.subject.value]) {
+                vocabularies[quad.subject.value].push(quad.object.value);
+              } else {
+                vocabularies[quad.subject.value] = [ quad.object.value ];
+              }
+              break;
+            case VOID_URI_SPACE:
+              if (!uriRegexPatterns[quad.subject.value]) {
+                uriRegexPatterns[quad.subject.value] = new RegExp(`^${quad.object.value}`, 'u');
+              }
+              break;
+            case VOID_URI_REGEX_PATTERN:
+              uriRegexPatterns[quad.subject.value] = new RegExp(quad.object.value, 'u');
+              break;
+            case VOID_PROPERTY_PARTITION:
+              if (propertyPartitions[quad.subject.value]) {
+                propertyPartitions[quad.subject.value].push(quad.object.value);
+              } else {
+                propertyPartitions[quad.subject.value] = [ quad.object.value ];
+              }
+              break;
+            case VOID_CLASS_PARTITION:
+              if (classPartitions[quad.subject.value]) {
+                classPartitions[quad.subject.value].push(quad.object.value);
+              } else {
+                classPartitions[quad.subject.value] = [ quad.object.value ];
+              }
+              break;
+            case SD_DEFAULT_DATASET:
+              defaultDatasetUri = quad.object.value;
+              break;
+            case SD_DEFAULT_GRAPH:
+              defaultGraphUri = quad.object.value;
+              break;
+            case SD_FEATURE:
+              if (quad.object.value === SD_UNION_DEFAULT_GRAPH) {
+                unionDefaultGraph = true;
+              }
+              break;
           }
+        })
+        .on('end', () => {
+          const datasets: IDataset[] = [];
+
+          // Helper function to extract property partitions into a map
+          const getPropertyPartitions = (uri: string): Record<string, IVoidPropertyPartition> => {
+            const partitions: Record<string, IVoidPropertyPartition> = {};
+            if (propertyPartitions[uri]) {
+              for (const partitionUri of propertyPartitions[uri]) {
+                const propertyUri = propertyPartitionProperties[partitionUri];
+                const propertyObjects = distinctObjects[partitionUri];
+                const propertySubjects = distinctSubjects[partitionUri];
+                const propertyTriples = triples[partitionUri];
+                if (propertyUri && (propertyObjects || propertySubjects || propertyTriples)) {
+                  partitions[propertyUri] = {
+                    distinctObjects: propertyObjects,
+                    distinctSubjects: propertySubjects,
+                    triples: propertyTriples,
+                  };
+                }
+              }
+            }
+            return partitions;
+          };
+
+          // Helper function to extract class partitions into a map
+          const getClassPartitions = (uri: string): Record<string, IVoidClassPartition> => {
+            const partitions: Record<string, IVoidClassPartition> = {};
+            if (classPartitions[uri]) {
+              for (const partitionUri of classPartitions[uri]) {
+                const classUri = classPartitionClasses[partitionUri];
+                const classEntities = entities[partitionUri];
+                const classPropertyPartitions = propertyPartitions[partitionUri];
+                if (classUri && (classEntities || classPropertyPartitions)) {
+                  partitions[classUri] = {
+                    entities: classEntities,
+                    propertyPartitions: getPropertyPartitions(partitionUri),
+                  };
+                }
+              }
+            }
+            return partitions;
+          };
+
+          if (defaultDatasetUri) {
+            if (defaultGraphUri && vocabularies[defaultDatasetUri] && !vocabularies[defaultGraphUri]) {
+              vocabularies[defaultGraphUri] = vocabularies[defaultDatasetUri];
+            }
+            datasetUris.delete(defaultDatasetUri);
+          }
+
+          if (unionDefaultGraph && defaultGraphUri) {
+            datasetUris.delete(defaultGraphUri);
+          }
+
+          for (const uri of datasetUris) {
+            // Only the VoID descriptions with triple counts and class or property partitions are actually useful,
+            // and any other ones would contain insufficient information to use in estimation, as the formulae
+            // would go to 0 for most estimations.
+            if (triples[uri] && (classPartitions[uri] || propertyPartitions[uri])) {
+              const dataset: IVoidDataset = {
+                entities: entities[uri],
+                identifier: uri,
+                classes: classes[uri] ?? classPartitions[uri]?.length ?? 0,
+                classPartitions: getClassPartitions(uri),
+                distinctObjects: distinctObjects[uri],
+                distinctSubjects: distinctSubjects[uri],
+                propertyPartitions: getPropertyPartitions(uri),
+                triples: triples[uri],
+                uriRegexPattern: uriRegexPatterns[uri],
+                vocabularies: vocabularies[uri],
+              };
+              datasets.push({
+                getCardinality: async(operation: Algebra.Operation): Promise<QueryResultCardinality> => ({
+                  ...getCardinality(dataset, operation),
+                  dataset: action.url,
+                }),
+                source: action.url,
+                uri,
+              });
+            }
+          }
+
+          resolve({ metadata: datasets.length > 0 ? { datasets } : {}});
         });
     });
-  }
-
-  public async getDatasets(store: RDF.Store, source: string): Promise<IDataset[]> {
-    const datasets: IDataset[] = [];
-
-    const query = `
-      PREFIX void: <http://rdfs.org/ns/void#>
-      PREFIX sd: <http://www.w3.org/ns/sparql-service-description#>
-      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-
-      SELECT DISTINCT ?identifier ?triples ?uriRegexPattern ?uriSpace WHERE {
-        ?identifier rdf:type ?type .
-        ?identifier void:triples ?triples .
-
-        # Exclude intermediate SPARQL SD defaultDataset
-        FILTER NOT EXISTS { ?service sd:defaultDataset ?identifier }
-
-        # Exclude union default graphs as not actual graphs
-        FILTER NOT EXISTS { ?identifier ^sd:defaultGraph/^sd:defaultDataset/sd:feature sd:UnionDefaultGraph }
-
-        # Try to find the URI regex pattern on the dataset or the parent of it
-        OPTIONAL { ?identifier ^sd:defaultGraph?/void:uriRegexPattern ?uriRegexPattern }
-
-        # Try to find the uriSpace on the dataset or the parent of it
-        OPTIONAL { ?identifier ^sd:defaultGraph?/void:uriSpace ?uriSpace }
-
-        # By definition, sd:Graph and sd:Dataset are both also void:Datasets,
-        # however sd:Dataset represents the dataset and not the graph
-        VALUES ?type { sd:Graph void:Dataset }
-      }
-    `;
-
-    const queryBindings = await this.queryEngine.queryBindings(query, { sources: [ store ]});
-
-    for await (const bindings of queryBindings) {
-      const identifier = bindings.get('identifier')!;
-      if (identifier.termType === 'BlankNode' || identifier.termType === 'NamedNode') {
-        let resourceUriPattern: RegExp | undefined;
-
-        if (bindings.has('uriRegexPattern')) {
-          resourceUriPattern = new RegExp(bindings.get('uriRegexPattern')!.value, 'u');
-        } else if (bindings.has('uriSpace')) {
-          resourceUriPattern = new RegExp(`^${bindings.get('uriSpace')?.value}`, 'u');
-        }
-
-        datasets.push(new VoidDataset({
-          identifier,
-          queryCacheSize: this.queryCacheSize,
-          queryEngine: this.queryEngine,
-          resourceUriPattern,
-          source,
-          store,
-          triples: Number.parseInt(bindings.get('triples')!.value, 10),
-          vocabularies: await this.getVocabularies(store, identifier),
-        }));
-      }
-    }
-
-    return datasets;
-  }
-
-  public async getVocabularies(
-    store: RDF.Store,
-    identifier: RDF.NamedNode | RDF.BlankNode,
-  ): Promise<string[] | undefined> {
-    const vocabularies: string[] = [];
-
-    const query = `
-      PREFIX void: <http://rdfs.org/ns/void#>
-      PREFIX sd: <http://www.w3.org/ns/sparql-service-description#>
-
-      SELECT DISTINCT ?vocabulary WHERE {
-        ${termToString(identifier)} ^sd:defaultGraph?/void:vocabulary ?vocabulary .
-      }
-    `;
-
-    const bindingsStream = await this.queryEngine.queryBindings(query, { sources: [ store ]});
-
-    for await (const bindings of bindingsStream) {
-      vocabularies.push(bindings.get('vocabulary')!.value);
-    }
-
-    if (vocabularies.length > 0) {
-      return vocabularies;
-    }
   }
 }
 
@@ -158,10 +239,4 @@ export interface IActorRdfMetadataExtractVoidArgs extends IActorRdfMetadataExtra
    * @default {<urn:comunica:default:init/actors#query>}
    */
   actorInitQuery: ActorInitQueryBase;
-  /**
-   * The size for the query cache used in cardinality estimation to avoid repeat queries.
-   * Each discovered VoID dataset will get its own cache, so this should not be too high.
-   * @default {10}
-   */
-  queryCacheSize: number;
 }

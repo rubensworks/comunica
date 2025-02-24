@@ -15,16 +15,6 @@ export interface IDataset {
    */
   source: string;
   /**
-   * The regular expression that will be matched by all resource URIs within this dataset.
-   * This is equivalent to void:uriPatternRegex from the VoID specification.
-   */
-  resourceUriPattern?: RegExp;
-  /**
-   * The exhaustive list of vocabularies used within this dataset, if provided.
-   * For VoID datasets, this is the collection of all void:vocabulary values.
-   */
-  vocabularies?: string[];
-  /**
    * Calculate the cardinality of the given operation within this dataset.
    * @param {Algebra.Operation} operation SPARQL algebra operation.
    * @returns {QueryResultCardinality} Upper bound for the cardinality.
