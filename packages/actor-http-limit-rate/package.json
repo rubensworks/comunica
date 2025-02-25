@@ -1,0 +1,43 @@
+{
+  "name": "@comunica/actor-http-limit-rate",
+  "version": "4.1.0",
+  "description": "Comunica HTTP bus actor that performs rate limiting",
+  "lsd:module": true,
+  "license": "MIT",
+  "homepage": "https://comunica.dev/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/comunica/comunica.git",
+    "directory": "packages/actor-http-limit-rate"
+  },
+  "bugs": {
+    "url": "https://github.com/comunica/comunica/issues"
+  },
+  "keywords": [
+    "comunica",
+    "runner"
+  ],
+  "sideEffects": false,
+  "main": "lib/index.js",
+  "typings": "lib/index",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "components",
+    "lib/**/*.d.ts",
+    "lib/**/*.js",
+    "lib/**/*.js.map"
+  ],
+  "scripts": {
+    "build": "yarn run build:ts && yarn run build:components",
+    "build:ts": "node \"../../node_modules/typescript/bin/tsc\"",
+    "build:components": "componentsjs-generator"
+  },
+  "dependencies": {
+    "@comunica/bus-http": "^4.1.0",
+    "@comunica/bus-http-invalidate": "^4.1.0",
+    "@comunica/core": "^4.1.0",
+    "@comunica/mediatortype-time": "^4.1.0"
+  }
+}
