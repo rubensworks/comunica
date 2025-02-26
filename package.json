@@ -86,7 +86,7 @@
     "rdf-test-suite-ldf": "^1.5.0",
     "setup-polly-jest": "^0.11.0",
     "sparqlalgebrajs": "^4.3.7",
-    "streamify-array": "^1.0.1",
+    "streamify-array": "^2.0.0",
     "ts-jest": "^29.0.5",
     "ts-loader": "^9.0.0",
     "ts-node": "^10.0.0",
