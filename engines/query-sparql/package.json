@@ -178,6 +178,7 @@
     "@comunica/actor-hash-bindings-murmur": "^4.1.0",
     "@comunica/actor-hash-quads-murmur": "^4.1.0",
     "@comunica/actor-http-fetch": "^4.1.0",
+    "@comunica/actor-http-limit-rate": "^4.1.0",
     "@comunica/actor-http-proxy": "^4.1.0",
     "@comunica/actor-http-retry": "^4.1.0",
     "@comunica/actor-http-wayback": "^4.1.0",
