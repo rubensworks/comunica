@@ -15,7 +15,7 @@
     "ccqs:config/hash-bindings/mediators.json",
     "ccqs:config/hash-quads/actors.json",
     "ccqs:config/hash-quads/mediators.json",
-    "ccqs:config/http/actors.json",
+    "ccqs:config/http/actors-v4-1-0.json",
     "ccqs:config/http/mediators.json",
     "ccqs:config/http-invalidate/actors.json",
     "ccqs:config/http-invalidate/mediators.json",

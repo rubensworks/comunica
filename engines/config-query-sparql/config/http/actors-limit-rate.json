@@ -1,0 +1,16 @@
+{
+  "@context": [
+    "https://linkedsoftwaredependencies.org/bundles/npm/@comunica/runner/^4.0.0/components/context.jsonld",
+    "https://linkedsoftwaredependencies.org/bundles/npm/@comunica/actor-http-limit-rate/^4.0.0/components/context.jsonld"
+  ],
+  "@id": "urn:comunica:default:Runner",
+  "@type": "Runner",
+  "actors": [
+    {
+      "@id": "urn:comunica:default:http/actors#limit-rate",
+      "@type": "ActorHttpLimitRate",
+      "mediatorHttp": { "@id": "urn:comunica:default:http/mediators#main" },
+      "beforeActors": { "@id": "urn:comunica:default:http/actors#proxy" }
+    }
+  ]
+}
