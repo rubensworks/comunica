@@ -12274,6 +12274,11 @@ streamify-array@^1.0.1:
   resolved "https://registry.npmjs.org/streamify-array/-/streamify-array-1.0.1.tgz"
   integrity sha512-ZnswaBcC6B1bhPLSQOlC6CdaDUSzU0wr2lvvHpbHNms8V7+DLd8uEAzDAWpsjxbFkijBHhuObFO/qqu52DZUMA==
 
+streamify-array@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/streamify-array/-/streamify-array-2.0.0.tgz#8eeaa1e4d19541231f4a253d1704fd6c175ccfda"
+  integrity sha512-KzJjLpbiJxH0tv1HuO5GQSsgNMfi0utPVzHmoMFKMK6PeQ1IziGT7KqCMIT1iLaxpLMXyWbd0ct6GpoUd9KvzQ==
+
 streamify-string@^1.0.1:
   version "1.0.1"
   resolved "https://registry.npmjs.org/streamify-string/-/streamify-string-1.0.1.tgz"
