@@ -100,7 +100,7 @@ Then, you can ask Claude something like the following:
 
 This MCP server provides the following tools:
 
-- **query_sparql**: Execute SPARQL queries over one or more remote sources (SPARQL endpoints, TPF interfaces, or RDF files)
+- **query_sparql**: Execute SPARQL queries over one or more remote sources (SPARQL endpoints, TPF interfaces, or RDF files), which also includes update queries.
 - **query_sparql_rdf**: Execute SPARQL queries over a serialized RDF dataset provided as a string (useful for querying Turtle, N-Triples, or other RDF formats directly)
 
 ## Learn more
