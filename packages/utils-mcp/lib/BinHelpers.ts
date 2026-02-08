@@ -7,15 +7,27 @@ import { SparqlMcpServer } from './SparqlMcpServer';
 export function runCli(queryEngine: QueryEngineBase, version: string): void {
   (async() => {
     const argv = await yargs(hideBin(process.argv))
+      .option('mode', {
+        alias: 'm',
+        type: 'string',
+        choices: [ 'stdio', 'http' ],
+        demandOption: true,
+        description: 'Transport mode for the MCP server',
+      })
       .option('port', {
         alias: 'p',
         type: 'number',
         default: 3123,
-        description: 'Port to run the MCP server on',
+        description: 'Port to run the MCP server on (only for http mode)',
       })
       .parse();
 
-    const server = new SparqlMcpServer(argv.port, queryEngine, version);
+    const server = new SparqlMcpServer(
+      <'stdio' | 'http'> argv.mode,
+      argv.port,
+      queryEngine,
+      version,
+    );
     server.start().catch((error) => {
       console.error('Server error:', error);
       process.exit(1);

@@ -36,11 +36,11 @@ describe('SparqlMcpServer', () => {
     mockQueryEngine.query.mockClear();
     mockQueryEngine.resultToString.mockClear();
 
-    server = new SparqlMcpServer(3000, <QueryEngineBase> <unknown> mockQueryEngine, '1.2.3');
+    server = new SparqlMcpServer('http', 3000, <QueryEngineBase> <unknown> mockQueryEngine, '1.2.3');
   });
 
   describe('start', () => {
-    it('should start FastMCP server on specified port', async() => {
+    it('should start FastMCP server on specified port in http mode', async() => {
       await server.start();
 
       expect(mockStart).toHaveBeenCalledWith({
@@ -50,6 +50,29 @@ describe('SparqlMcpServer', () => {
           stateless: true,
         },
       });
+    });
+
+    it('should start FastMCP server in stdio mode', async() => {
+      const stdioServer = new SparqlMcpServer('stdio', 3000, <QueryEngineBase> <unknown> mockQueryEngine, '1.2.3');
+      await stdioServer.start();
+
+      expect(mockStart).toHaveBeenCalledWith({
+        transportType: 'stdio',
+      });
+    });
+
+    it('should start FastMCP server in stdio mode without using port', async() => {
+      // Port parameter is ignored in stdio mode
+      const stdioServer = new SparqlMcpServer('stdio', 0, <QueryEngineBase> <unknown> mockQueryEngine, '1.2.3');
+      await stdioServer.start();
+
+      expect(mockStart).toHaveBeenCalledWith({
+        transportType: 'stdio',
+      });
+      // Verify that httpStream config was not passed
+      expect(mockStart).not.toHaveBeenCalledWith(expect.objectContaining({
+        httpStream: expect.anything(),
+      }));
     });
   });
 

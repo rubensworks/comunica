@@ -42,8 +42,39 @@ For this, please refer to the README of the [Comunica monorepo](https://github.c
 
 ### Claude Desktop
 
-After installing, you can run `comunica-mcp-sparql` from the command line.
-Then, add the following entry to your `claude_desktop_config.json` file (can be found via Settings / Developer / Edit Config):
+After installing, you can run the MCP server in two modes:
+
+#### Stdio Mode (Recommended for Claude Desktop)
+
+With stdio mode, the MCP server communicates directly via standard input/output, which is simpler and doesn't require a network port.
+
+Add the following entry to your `claude_desktop_config.json` file (can be found via Settings / Developer / Edit Config):
+
+```json
+{
+  "mcpServers": {
+    "sparql": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@comunica/mcp-sparql",
+        "--mode",
+        "stdio"
+      ]
+    }
+  }
+}
+```
+
+#### HTTP Mode
+
+Alternatively, you can run the MCP server in HTTP mode, which requires starting the server manually first:
+
+```bash
+$ comunica-mcp-sparql --mode http --port 3123
+```
+
+Then, add the following entry to your `claude_desktop_config.json`:
 
 ```json
 {
