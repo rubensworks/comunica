@@ -323,6 +323,36 @@ describe('SparqlMcpServer', () => {
     });
   });
 
+  describe('executeQuery with default context', () => {
+    let ctx: Context<FastMCPSessionAuth>;
+
+    beforeEach(() => {
+      ctx = <any> {
+        streamContent: jest.fn(),
+      };
+    });
+
+    it('should execute query with default queryContext parameter', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      // Call executeQuery without the optional queryContext parameter
+      const result = await (<any> server).executeQuery(
+        'SELECT *',
+        [{ value: 'http://ex.org' }],
+        0,
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', {
+        sources: [{ value: 'http://ex.org' }],
+      });
+      expect(result).toBe('RESULT');
+    });
+  });
+
   describe('query_sparql_rdf tool logic', () => {
     let ctx: Context<FastMCPSessionAuth>;
     let toolExecuteCallbackRdf: any;
@@ -360,7 +390,7 @@ describe('SparqlMcpServer', () => {
       expect(result).toBe('RESULT');
     });
 
-    it('should execute query with baseIRI parameter', async() => {
+    it('should execute query with fileBaseIRI parameter', async() => {
       mockQueryEngine.query.mockResolvedValue({});
       mockQueryEngine.resultToString.mockResolvedValue({
         data: Readable.from([ 'RESULT' ]),
@@ -371,7 +401,7 @@ describe('SparqlMcpServer', () => {
           query: 'SELECT * WHERE { ?s ?p ?o }',
           value: '<s> <p> <o>.',
           mediaType: 'text/turtle',
-          baseIRI: 'http://example.org/',
+          fileBaseIRI: 'http://example.org/',
         },
         ctx,
       );
@@ -448,7 +478,7 @@ describe('SparqlMcpServer', () => {
       expect(logOutput).toContain('Query: SELECT * WHERE { ?s ?p ?o }');
     });
 
-    it('should log baseIRI when provided', async() => {
+    it('should log fileBaseIRI when provided', async() => {
       mockQueryEngine.query.mockResolvedValue({});
       mockQueryEngine.resultToString.mockResolvedValue({
         data: Readable.from([ 'RESULT' ]),
@@ -460,13 +490,13 @@ describe('SparqlMcpServer', () => {
           query: 'SELECT * WHERE { ?s ?p ?o }',
           value: '<s> <p> <o>.',
           mediaType: 'text/turtle',
-          baseIRI: 'http://example.org/',
+          fileBaseIRI: 'http://example.org/',
         },
         ctx,
       );
 
       const logOutput = stderrWrites.join('');
-      expect(logOutput).toContain('Base IRI: http://example.org/');
+      expect(logOutput).toContain('File Base IRI: http://example.org/');
     });
 
     it('should log query success to stderr', async() => {
@@ -556,6 +586,332 @@ describe('SparqlMcpServer', () => {
     it('should handle URLs with colons after prefix', () => {
       const result = (<any> server).parseSourceString('sparql@http://example.org:8080/sparql');
       expect(result).toEqual({ value: 'http://example.org:8080/sparql', type: 'sparql' });
+    });
+  });
+
+  describe('buildQueryContext', () => {
+    it('should build empty context when no options provided', () => {
+      const result = (<any> server).buildQueryContext({});
+      expect(result).toEqual({});
+    });
+
+    it('should add queryFormat when language provided', () => {
+      const result = (<any> server).buildQueryContext({ queryFormatLanguage: 'sparql' });
+      expect(result).toEqual({ queryFormat: { language: 'sparql', version: '1.1' }});
+    });
+
+    it('should add queryFormat when version provided', () => {
+      const result = (<any> server).buildQueryContext({ queryFormatVersion: '1.2' });
+      expect(result).toEqual({ queryFormat: { language: 'sparql', version: '1.2' }});
+    });
+
+    it('should add queryFormat with both language and version', () => {
+      const result = (<any> server).buildQueryContext({
+        queryFormatLanguage: 'sparql',
+        queryFormatVersion: '1.2',
+      });
+      expect(result).toEqual({ queryFormat: { language: 'sparql', version: '1.2' }});
+    });
+
+    it('should add baseIRI when provided', () => {
+      const result = (<any> server).buildQueryContext({ baseIRI: 'http://example.org/' });
+      expect(result).toEqual({ baseIRI: 'http://example.org/' });
+    });
+
+    it('should add httpProxyHandler when httpProxy provided', async() => {
+      const result = (<any> server).buildQueryContext({ httpProxy: 'http://proxy.example.com:8080' });
+      expect(result.httpProxyHandler).toBeDefined();
+      expect(result.httpProxyHandler.getProxy).toBeInstanceOf(Function);
+
+      // Test that getProxy returns the correct proxy request
+      const proxyRequest = await result.httpProxyHandler.getProxy({ input: 'http://example.org', init: {}});
+      expect(proxyRequest).toEqual({
+        input: 'http://proxy.example.com:8080',
+        init: {},
+      });
+    });
+
+    it('should add httpAuth when provided', () => {
+      const result = (<any> server).buildQueryContext({ httpAuth: 'user:pass' });
+      expect(result).toEqual({ httpAuth: 'user:pass' });
+    });
+
+    it('should add httpTimeout when provided', () => {
+      const result = (<any> server).buildQueryContext({ httpTimeout: 5000 });
+      expect(result).toEqual({ httpTimeout: 5000 });
+    });
+
+    it('should add httpRetryCount when provided', () => {
+      const result = (<any> server).buildQueryContext({ httpRetryCount: 3 });
+      expect(result).toEqual({ httpRetryCount: 3 });
+    });
+
+    it('should handle multiple options', () => {
+      const result = (<any> server).buildQueryContext({
+        queryFormatLanguage: 'sparql',
+        queryFormatVersion: '1.2',
+        baseIRI: 'http://example.org/',
+        httpAuth: 'user:pass',
+        httpTimeout: 10000,
+        httpRetryCount: 5,
+      });
+      expect(result.queryFormat).toEqual({ language: 'sparql', version: '1.2' });
+      expect(result.baseIRI).toBe('http://example.org/');
+      expect(result.httpAuth).toBe('user:pass');
+      expect(result.httpTimeout).toBe(10000);
+      expect(result.httpRetryCount).toBe(5);
+    });
+  });
+
+  describe('query_sparql with optional parameters', () => {
+    let ctx: Context<FastMCPSessionAuth>;
+    let toolExecuteCallback: any;
+
+    beforeEach(() => {
+      ctx = <any> {
+        streamContent: jest.fn(),
+      };
+      toolExecuteCallback = toolExecuteCallbacks[0];
+    });
+
+    it('should pass queryFormat to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [ 'http://ex.org' ],
+          queryFormatLanguage: 'sparql',
+          queryFormatVersion: '1.1',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', expect.objectContaining({
+        sources: [{ value: 'http://ex.org' }],
+        queryFormat: { language: 'sparql', version: '1.1' },
+      }));
+    });
+
+    it('should pass baseIRI to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [ 'http://ex.org' ],
+          baseIRI: 'http://base.org/',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', expect.objectContaining({
+        sources: [{ value: 'http://ex.org' }],
+        baseIRI: 'http://base.org/',
+      }));
+    });
+
+    it('should pass httpProxy to query engine as httpProxyHandler', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [ 'http://ex.org' ],
+          httpProxy: 'http://proxy.example.com:8080',
+        },
+        ctx,
+      );
+
+      const callArgs = mockQueryEngine.query.mock.calls[0];
+      expect(callArgs[1]).toHaveProperty('httpProxyHandler');
+      expect(callArgs[1].httpProxyHandler.getProxy).toBeInstanceOf(Function);
+    });
+
+    it('should pass httpAuth to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [ 'http://ex.org' ],
+          httpAuth: 'user:pass',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', expect.objectContaining({
+        sources: [{ value: 'http://ex.org' }],
+        httpAuth: 'user:pass',
+      }));
+    });
+
+    it('should pass httpTimeout to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [ 'http://ex.org' ],
+          httpTimeout: 5000,
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', expect.objectContaining({
+        sources: [{ value: 'http://ex.org' }],
+        httpTimeout: 5000,
+      }));
+    });
+
+    it('should pass httpRetryCount to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [ 'http://ex.org' ],
+          httpRetryCount: 3,
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', expect.objectContaining({
+        sources: [{ value: 'http://ex.org' }],
+        httpRetryCount: 3,
+      }));
+    });
+
+    it('should pass multiple optional parameters to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [ 'http://ex.org' ],
+          queryFormatLanguage: 'sparql',
+          queryFormatVersion: '1.2',
+          baseIRI: 'http://base.org/',
+          httpAuth: 'user:pass',
+          httpTimeout: 10000,
+          httpRetryCount: 5,
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', expect.objectContaining({
+        sources: [{ value: 'http://ex.org' }],
+        queryFormat: { language: 'sparql', version: '1.2' },
+        baseIRI: 'http://base.org/',
+        httpAuth: 'user:pass',
+        httpTimeout: 10000,
+        httpRetryCount: 5,
+      }));
+    });
+  });
+
+  describe('query_sparql_rdf with optional parameters', () => {
+    let ctx: Context<FastMCPSessionAuth>;
+    let toolExecuteCallbackRdf: any;
+
+    beforeEach(() => {
+      ctx = <any> {
+        streamContent: jest.fn(),
+      };
+      toolExecuteCallbackRdf = toolExecuteCallbacks[1];
+    });
+
+    it('should pass queryFormat to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+          queryFormatLanguage: 'sparql',
+          queryFormatVersion: '1.1',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', expect.objectContaining({
+        queryFormat: { language: 'sparql', version: '1.1' },
+      }));
+    });
+
+    it('should pass baseIRI to query engine context', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+          baseIRI: 'http://query.example.org/',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', expect.objectContaining({
+        baseIRI: 'http://query.example.org/',
+      }));
+    });
+
+    it('should pass fileBaseIRI, baseIRI and queryFormat to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+          fileBaseIRI: 'http://example.org/',
+          baseIRI: 'http://query.example.org/',
+          queryFormatLanguage: 'sparql',
+          queryFormatVersion: '1.2',
+        },
+        ctx,
+      );
+
+      // FileBaseIRI should be in the source, baseIRI should be in the context
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', expect.objectContaining({
+        sources: [ expect.objectContaining({
+          baseIRI: 'http://example.org/',
+        }) ],
+        baseIRI: 'http://query.example.org/',
+        queryFormat: { language: 'sparql', version: '1.2' },
+      }));
     });
   });
 });
