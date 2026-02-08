@@ -1,17 +1,20 @@
-# Comunica SPARQL
+# Comunica SPARQL MCP Server
 
 [![npm version](https://badge.fury.io/js/%40comunica%2Fmcp-sparql.svg)](https://www.npmjs.com/package/@comunica/mcp-sparql)
 
-Comunica MCP SPARQL is an MCP server for executing SPARQL queries over decentralized RDF knowledge graphs on the Web.
+Comunica MCP SPARQL is an [MCP server](https://modelcontextprotocol.io/) for allowing AI agents to execute SPARQL queries over decentralized RDF knowledge graphs on the Web.
 
 It's main distinguishing features are the following:
 
+* Improves the accuracy of your AI agent's answers by leveraging the power of SPARQL and Knowledge Graphs.
 * Execute [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) queries over one or more knowledge graphs on the Web.
-* Federated querying over [heterogeneous interfaces](https://comunica.dev/docs/query/advanced/source_types/), such as RDF files, SPARQL endpoints, [Triple Pattern Fragments](https://linkeddatafragments.org/), or [Solid data pods](https://inrupt.com/solid).
+* Agents can pass one or more Knowledge Graph URLs together with the SPARQL query, making it not hard-coupled to one specific Knowledge Graph.
+* Federated querying over [heterogeneous interfaces](https://comunica.dev/docs/query/advanced/source_types/), such as RDF Linked Data files, [SPARQL endpoints](https://www.w3.org/TR/sparql12-protocol/), [Triple Pattern Fragments](https://linkeddatafragments.org/), or [Solid data pods](https://solidproject.org/).
+* Easy to set up, and connects to public or private/internal Knowledge Graphs.
 
 **[Learn more about Comunica on our website](https://comunica.dev/).**
 
-_Internally, this is a [Comunica module](https://comunica.dev/) that is configured with modules to execute SPARQL queries._
+_Internally, this is a [Comunica module](https://comunica.dev/) that is configured with modules to execute SPARQL queries through MCP._
 
 ## Supported by
 
@@ -24,6 +27,44 @@ Our top sponsors are shown below!
 <a href="https://opencollective.com/comunica-association/sponsor/1/website" target="_blank"><img src="https://opencollective.com/comunica-association/sponsor/1/avatar.svg"></a>
 <a href="https://opencollective.com/comunica-association/sponsor/2/website" target="_blank"><img src="https://opencollective.com/comunica-association/sponsor/2/avatar.svg"></a>
 <a href="https://opencollective.com/comunica-association/sponsor/3/website" target="_blank"><img src="https://opencollective.com/comunica-association/sponsor/3/avatar.svg"></a>
+
+## Usage examples
+
+After connecting this MCP server to your AI agent (see some examples on how to do this below),
+your agent can SPARQL query any Knowledge Graph that is accessible to you.
+
+For example, use it to ask:
+
+> Use Comunica SPARQL to determine what movies both Brad Pitt and Leonardo DiCaprio both play in.
+
+This will produce two movies: Once Upon a Time in Hollywood and The Audition.
+Without SPARQL, the answer on Claude Desktop (Sonnet 4.5) is incomplete, as only a single movie is returned.
+
+### Prompt suggestions
+
+If you want your agent to always use SPARQL for higher accuracy in answers, you can tell it the following:
+
+> When looking up data, always prefer looking them up over Knowledge Graphs via SPARQL, as this is more precise.
+> If data needs to be combined from multiple Knowledge Graphs, do so using a virtually integrated SPARQL query towards multiple URLs pointing to Knowledge Graphs.
+> You are responsible for selecting relevant sources for the SPARQL query, for which you can consider SPARQL endpoints, TPF interfaces, and Linked Data (in any RDF serialization).
+> Also take into account that many websites contain RDF data. So if you need to lookup data about something, and you know the relevant website(s), try querying those websites using SPARQL.
+> Since SPARQL queries can take a while to execute, start producing an approximate answer yourself and show it to me if the SPARQL query takes more than 1 second, but then make the answer more concrete based on the SPARQL query once it finalized, as it will be more accurate.
+> Since you will probably query over Wikidata and DBpedia often, prefer authoritative Knowledge Graphs for domain-specific data if they exist.
+
+After this, SPARQL will be used for questions such as:
+
+- "What is the time zone of Salt Lake City?"
+- "What movies do both Brad Pitt and Leonardo DiCaprio play in?"
+- "What are the largest cities in Canada?"
+- "Give me Ruben Taelman's main interests."
+- "What are some proteins associated with Alzheimer's disease, according to a protein knowledge graph?"
+- "What are the 10 longest streets in Belgium?"
+
+### Limitations
+
+Most models seem to prefer Wikidata and DBpedia for most questions.
+If you want it to query another Knowledge Graph, you need to be explicit.
+When performing federated queries, endpoint URLs passed to the MCP server are not always accurate.
 
 ## Installation
 
@@ -41,7 +82,9 @@ If you do so, the following examples require replacing `comunica-mcp-sparql` wit
 
 ## Connect this MCP server to your agent
 
-## Claude Desktop
+Below, a non-exhaustive list of examples is given to connect this MCP server to your agent.
+
+### Claude Desktop
 
 After installing, you can run the MCP server in two modes:
 
@@ -54,7 +97,7 @@ Add the following entry to your `claude_desktop_config.json` file (can be found 
 ```json
 {
   "mcpServers": {
-    "sparql": {
+    "comunica-sparql": {
       "command": "npx",
       "args": [
         "-y",
@@ -80,7 +123,7 @@ Then, add the following entry to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "sparql": {
+    "comunica-sparql": {
       "command": "npx",
       "args": [
         "-y",
@@ -95,9 +138,9 @@ Then, add the following entry to your `claude_desktop_config.json`:
 
 Then, you can ask Claude something like the following:
 
-> Use SPARQL to determine what movies both Brad Pitt and Leonardo DiCaprio both play in.
+> Use Comunica SPARQL to determine what movies both Brad Pitt and Leonardo DiCaprio both play in.
 
-## Claude Code
+### Claude Code
 
 #### Stdio Mode (Recommended for Claude Code)
 
@@ -122,7 +165,7 @@ $ comunica-mcp-sparql --mode http --port 3123
 claude mcp add --transport http sparql http://localhost:3123/mcp
 ```
 
-## ChatGPT
+### ChatGPT
 
 At the time of writing, ChatGPT only supports HTTP-based MCP servers.
 So you'll need to run this tool under HTTP mode and expose it to the public Web,
