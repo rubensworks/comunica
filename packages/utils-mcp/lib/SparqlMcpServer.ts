@@ -8,13 +8,17 @@ import { z } from 'zod';
  */
 export class SparqlMcpServer {
   private readonly server: FastMCP;
+  private readonly stderr: any;
+  private queryId = 0;
 
   public constructor(
     private readonly mode: 'stdio' | 'http',
     private readonly port: number,
     private readonly queryEngine: QueryEngineBase,
     version: string,
+    stderr?: any,
   ) {
+    this.stderr = stderr ?? process.stderr;
     this.server = new FastMCP({
       name: 'sparql-mcp',
       version: <any> version,
@@ -31,8 +35,7 @@ export class SparqlMcpServer {
       await this.server.start({
         transportType: 'stdio',
       });
-      // eslint-disable-next-line no-console
-      console.error(`SPARQL MCP Server running in stdio mode`);
+      this.stderr.write(`SPARQL MCP Server running in stdio mode\n`);
     } else {
       await this.server.start({
         transportType: 'httpStream',
@@ -41,8 +44,7 @@ export class SparqlMcpServer {
           stateless: true,
         },
       });
-      // eslint-disable-next-line no-console
-      console.error(`SPARQL MCP Server listening on port ${this.port}`);
+      this.stderr.write(`SPARQL MCP Server listening on port ${this.port}\n`);
     }
   }
 
@@ -68,9 +70,14 @@ export class SparqlMcpServer {
     context: Context<FastMCPSessionAuth>,
   ): Promise<any> {
     const { query, sources } = args;
+    const currentQueryId = this.queryId++;
+
+    // Log query start
+    this.stderr.write(`[Query ${currentQueryId}] Starting SPARQL query\n`);
+    this.stderr.write(`[Query ${currentQueryId}] Sources: ${sources.join(', ')}\n`);
+    this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
+
     await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
-    // eslint-disable-next-line no-console
-    console.error(`Executing query on ${sources.join(', ')}`);
 
     try {
       const promises: Promise<any>[] = [];
@@ -85,10 +92,18 @@ export class SparqlMcpServer {
         data.on('end', resolve);
       });
       await Promise.all(promises);
+
+      // Log successful completion
+      this.stderr.write(`[Query ${currentQueryId}] Successfully completed\n`);
+
       return chunks.join('');
     } catch (error: any) {
-      // eslint-disable-next-line no-console
-      console.error(error);
+      // Log query failure
+      this.stderr.write(`[Query ${currentQueryId}] Failed with error: ${error.message}\n`);
+      if (error.stack) {
+        this.stderr.write(`[Query ${currentQueryId}] Stack trace: ${error.stack}\n`);
+      }
+
       return {
         isError: true,
         content: [
