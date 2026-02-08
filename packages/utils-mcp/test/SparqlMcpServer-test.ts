@@ -323,6 +323,36 @@ describe('SparqlMcpServer', () => {
     });
   });
 
+  describe('executeQuery with default context', () => {
+    let ctx: Context<FastMCPSessionAuth>;
+
+    beforeEach(() => {
+      ctx = <any> {
+        streamContent: jest.fn(),
+      };
+    });
+
+    it('should execute query with default queryContext parameter', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      // Call executeQuery without the optional queryContext parameter
+      const result = await (<any> server).executeQuery(
+        'SELECT *',
+        [{ value: 'http://ex.org' }],
+        0,
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', {
+        sources: [{ value: 'http://ex.org' }],
+      });
+      expect(result).toBe('RESULT');
+    });
+  });
+
   describe('query_sparql_rdf tool logic', () => {
     let ctx: Context<FastMCPSessionAuth>;
     let toolExecuteCallbackRdf: any;
