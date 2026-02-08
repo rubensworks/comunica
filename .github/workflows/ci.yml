@@ -276,6 +276,7 @@ jobs:
         run: cat performance/benchmark-${{ matrix.benchmark }}/combinations/combination_0/output/query-times.csv
 
   performance-consolidate:
+    if: ${{ secrets.PAT != '' }}
     name: Performance analysis
     needs:
       - misc
