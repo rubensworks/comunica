@@ -4,7 +4,7 @@
 
 Comunica MCP SPARQL File is an MCP server for executing SPARQL queries over local and remote RDF files.
 
-It's main distinguishing features are the following:
+Its main distinguishing features are the following:
 
 * Execute [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) queries over one or more knowledge graphs on the Web.
 * Federated querying over [heterogeneous interfaces](https://comunica.dev/docs/query/advanced/source_types/), such as RDF files, SPARQL endpoints, [Triple Pattern Fragments](https://linkeddatafragments.org/), or [Solid data pods](https://inrupt.com/solid).
