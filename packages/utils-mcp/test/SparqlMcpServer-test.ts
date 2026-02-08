@@ -98,12 +98,13 @@ describe('SparqlMcpServer', () => {
       }));
     });
 
-    it('should use process.stderr by default when stderr not provided', async() => {
+    it('should accept process.stderr as stderr parameter', async() => {
       const defaultServer = new SparqlMcpServer(
         'http',
         3000,
         <QueryEngineBase> <unknown> mockQueryEngine,
         '1.2.3',
+        process.stderr,
       );
       await defaultServer.start();
 

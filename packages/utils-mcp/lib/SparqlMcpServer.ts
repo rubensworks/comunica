@@ -1,3 +1,5 @@
+/* eslint-disable import/no-nodejs-modules */
+import type { Writable } from 'node:stream';
 import type { QueryEngineBase } from '@comunica/actor-init-query';
 import type { Context, FastMCPSessionAuth } from 'fastmcp';
 import { FastMCP } from 'fastmcp';
@@ -8,8 +10,7 @@ import { z } from 'zod';
  */
 export class SparqlMcpServer {
   private readonly server: FastMCP;
-  // Using `any` type for stderr to avoid Components.js parsing issues with node:stream imports
-  private readonly stderr: any;
+  private readonly stderr: Writable;
   private queryId = 0;
 
   public constructor(
@@ -17,9 +18,9 @@ export class SparqlMcpServer {
     private readonly port: number,
     private readonly queryEngine: QueryEngineBase,
     version: string,
-    stderr?: any,
+    stderr: Writable,
   ) {
-    this.stderr = stderr ?? process.stderr;
+    this.stderr = stderr;
     this.server = new FastMCP({
       name: 'sparql-mcp',
       version: <any> version,

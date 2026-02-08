@@ -2,7 +2,6 @@
   "name": "@comunica/utils-mcp",
   "version": "5.1.3",
   "description": "MCP helpers for Comunica",
-  "lsd:module": true,
   "license": "MIT",
   "funding": {
     "type": "opencollective",
@@ -31,15 +30,13 @@
     "bin/**/*.d.ts",
     "bin/**/*.js",
     "bin/**/*.js.map",
-    "components",
     "lib/**/*.d.ts",
     "lib/**/*.js",
     "lib/**/*.js.map"
   ],
   "scripts": {
-    "build": "yarn run build:ts && yarn run build:components",
-    "build:ts": "node \"../../node_modules/typescript/bin/tsc\"",
-    "build:components": "componentsjs-generator"
+    "build": "yarn run build:ts",
+    "build:ts": "node \"../../node_modules/typescript/bin/tsc\""
   },
   "dependencies": {
     "@comunica/actor-init-query": "^5.1.3",
