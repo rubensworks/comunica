@@ -60,6 +60,20 @@ describe('SparqlMcpServer', () => {
         transportType: 'stdio',
       });
     });
+
+    it('should start FastMCP server in stdio mode without using port', async() => {
+      // Port parameter is ignored in stdio mode
+      const stdioServer = new SparqlMcpServer('stdio', 0, <QueryEngineBase> <unknown> mockQueryEngine, '1.2.3');
+      await stdioServer.start();
+
+      expect(mockStart).toHaveBeenCalledWith({
+        transportType: 'stdio',
+      });
+      // Verify that httpStream config was not passed
+      expect(mockStart).not.toHaveBeenCalledWith(expect.objectContaining({
+        httpStream: expect.anything(),
+      }));
+    });
   });
 
   describe('tool registration', () => {

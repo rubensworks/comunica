@@ -20,12 +20,6 @@ export function runCli(queryEngine: QueryEngineBase, version: string): void {
         default: 3123,
         description: 'Port to run the MCP server on (only for http mode)',
       })
-      .check((args) => {
-        if (args.mode === 'http' && !args.port) {
-          throw new Error('Port is required when using http mode');
-        }
-        return true;
-      })
       .parse();
 
     const server = new SparqlMcpServer(
