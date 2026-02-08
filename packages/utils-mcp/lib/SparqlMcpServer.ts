@@ -1,6 +1,7 @@
 /* eslint-disable import/no-nodejs-modules */
 import type { Writable } from 'node:stream';
 import type { QueryEngineBase } from '@comunica/actor-init-query';
+import type { IQuerySourceUnidentifiedExpanded } from '@comunica/types';
 import type { Context, FastMCPSessionAuth } from 'fastmcp';
 import { FastMCP } from 'fastmcp';
 import { z } from 'zod';
@@ -50,13 +51,31 @@ export class SparqlMcpServer {
     }
   }
 
+  /**
+   * Parse a source string that may contain a type prefix (e.g., 'sparql@https://example.org/sparql').
+   * This follows the same syntax as the Comunica CLI for forcing source types.
+   * @param sourceString A source URL that may be prefixed with a type annotation.
+   * @returns An object with 'value' and optionally 'type' properties.
+   */
+  protected parseSourceString(sourceString: string): IQuerySourceUnidentifiedExpanded {
+    const source: IQuerySourceUnidentifiedExpanded = { value: '' };
+    const typeRegex = /^([^:]*)@/u;
+    const typeMatches = typeRegex.exec(sourceString);
+    if (typeMatches) {
+      source.type = typeMatches[1];
+      sourceString = sourceString.slice((source.type.length) + 1);
+    }
+    source.value = sourceString;
+    return source;
+  }
+
   protected registerTools(): void {
     this.server.addTool({
       name: 'query_sparql',
       description: `Execute a SPARQL query over one or more sources. When sending a SELECT query, results are serialized as 'application/sparql-results+json', CONSTRUCT and DESCRIBE results are in 'application/trig', and ASK queries return true or false.`,
       parameters: z.object({
         query: z.string().describe('SPARQL query string'),
-        sources: z.array(z.string()).describe(`List of SPARQL endpoint URLs, TPF interface URLs, or Linked Data (RDF) file paths`),
+        sources: z.array(z.string()).describe(`List of SPARQL endpoint URLs, TPF interface URLs, or Linked Data (RDF) file paths. You can optionally force a source type by prefixing the URL with a type annotation (e.g., 'sparql@https://example.org/sparql', 'file@/path/to/file.ttl', 'hypermedia@https://example.org/'). This is useful when the source type is already known to avoid auto-detection overhead.`),
       }),
       annotations: {
         // Signals this tool uses streaming
@@ -74,6 +93,9 @@ export class SparqlMcpServer {
     const { query, sources } = args;
     const currentQueryId = this.queryId++;
 
+    // Parse sources to extract type annotations
+    const parsedSources = sources.map(sourceString => this.parseSourceString(sourceString));
+
     // Log query start
     this.stderr.write(`[Query ${currentQueryId}] Starting SPARQL query\n`);
     this.stderr.write(`[Query ${currentQueryId}] Sources: ${sources.join(', ')}\n`);
@@ -84,7 +106,8 @@ export class SparqlMcpServer {
     try {
       const promises: Promise<any>[] = [];
       const chunks: string[] = [];
-      const { data } = await this.queryEngine.resultToString(await this.queryEngine.query(query, { sources }));
+      const queryResult = await this.queryEngine.query(query, { sources: parsedSources });
+      const { data } = await this.queryEngine.resultToString(queryResult);
       data.on('data', (chunk: string) => {
         chunks.push(chunk);
         promises.push(context.streamContent({ type: 'text', text: chunk.toString() }));

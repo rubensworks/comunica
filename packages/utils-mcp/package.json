@@ -40,6 +40,7 @@
   },
   "dependencies": {
     "@comunica/actor-init-query": "^5.1.3",
+    "@comunica/types": "^5.1.3",
     "@types/yargs": "^17.0.24",
     "fastmcp": "^3.31.0",
     "yargs": "^17.7.2",

@@ -167,7 +167,7 @@ describe('SparqlMcpServer', () => {
         ctx,
       );
       expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', {
-        sources: [ 'http://ex.org' ],
+        sources: [{ value: 'http://ex.org' }],
       });
       expect(result).toBe('RESULT');
     });
@@ -239,6 +239,92 @@ describe('SparqlMcpServer', () => {
       const logOutput = stderrWrites.join('');
       expect(logOutput).toContain('[Query 0]');
       expect(logOutput).toContain('[Query 1]');
+    });
+
+    it('should parse source type prefix and pass to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        { query: 'SELECT *', sources: [ 'sparql@http://ex.org/sparql' ]},
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', {
+        sources: [{ value: 'http://ex.org/sparql', type: 'sparql' }],
+      });
+    });
+
+    it('should parse multiple sources with mixed type prefixes', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        {
+          query: 'SELECT *',
+          sources: [
+            'sparql@http://ex.org/sparql',
+            'http://plain.org',
+            'file@/path/to/file.ttl',
+          ],
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', {
+        sources: [
+          { value: 'http://ex.org/sparql', type: 'sparql' },
+          { value: 'http://plain.org' },
+          { value: '/path/to/file.ttl', type: 'file' },
+        ],
+      });
+    });
+
+    it('should handle hypermedia type prefix', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallback(
+        { query: 'SELECT *', sources: [ 'hypermedia@http://ex.org/fragments' ]},
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', {
+        sources: [{ value: 'http://ex.org/fragments', type: 'hypermedia' }],
+      });
+    });
+  });
+
+  describe('parseSourceString', () => {
+    it('should parse normal URL without type prefix', () => {
+      const result = (<any> server).parseSourceString('http://example.org/');
+      expect(result).toEqual({ value: 'http://example.org/' });
+    });
+
+    it('should parse sparql type prefix', () => {
+      const result = (<any> server).parseSourceString('sparql@http://example.org/sparql');
+      expect(result).toEqual({ value: 'http://example.org/sparql', type: 'sparql' });
+    });
+
+    it('should parse file type prefix', () => {
+      const result = (<any> server).parseSourceString('file@/path/to/file.ttl');
+      expect(result).toEqual({ value: '/path/to/file.ttl', type: 'file' });
+    });
+
+    it('should parse hypermedia type prefix', () => {
+      const result = (<any> server).parseSourceString('hypermedia@http://example.org/');
+      expect(result).toEqual({ value: 'http://example.org/', type: 'hypermedia' });
+    });
+
+    it('should handle URLs with colons after prefix', () => {
+      const result = (<any> server).parseSourceString('sparql@http://example.org:8080/sparql');
+      expect(result).toEqual({ value: 'http://example.org:8080/sparql', type: 'sparql' });
     });
   });
 });
