@@ -284,29 +284,6 @@ describe('SparqlMcpServer', () => {
       });
     });
 
-    it('should log forced source types to stderr', async() => {
-      mockQueryEngine.query.mockResolvedValue({});
-      mockQueryEngine.resultToString.mockResolvedValue({
-        data: Readable.from([ 'RESULT' ]),
-      });
-
-      stderrWrites = [];
-      await toolExecuteCallback(
-        {
-          query: 'SELECT *',
-          sources: [
-            'sparql@http://ex.org/sparql',
-            'http://plain.org',
-          ],
-        },
-        ctx,
-      );
-
-      const logOutput = stderrWrites.join('');
-      expect(logOutput).toContain('[Query 0] Source 0 forced type: sparql');
-      expect(logOutput).not.toContain('[Query 0] Source 1 forced type');
-    });
-
     it('should handle hypermedia type prefix', async() => {
       mockQueryEngine.query.mockResolvedValue({});
       mockQueryEngine.resultToString.mockResolvedValue({

@@ -99,14 +99,6 @@ export class SparqlMcpServer {
     // Log query start
     this.stderr.write(`[Query ${currentQueryId}] Starting SPARQL query\n`);
     this.stderr.write(`[Query ${currentQueryId}] Sources: ${sources.join(', ')}\n`);
-
-    // Log source types if any are forced
-    for (const [ index, parsedSource ] of parsedSources.entries()) {
-      if (parsedSource.type) {
-        this.stderr.write(`[Query ${currentQueryId}] Source ${index} forced type: ${parsedSource.type}\n`);
-      }
-    }
-
     this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
 
     await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
