@@ -96,6 +96,13 @@ Then, you can ask Claude something like the following:
 
 > Use SPARQL to determine what movies both Brad Pitt and Leonardo DiCaprio both play in.
 
+## Available Tools
+
+This MCP server provides the following tools:
+
+- **query_sparql**: Execute SPARQL queries over one or more remote sources (SPARQL endpoints, TPF interfaces, or RDF files)
+- **query_sparql_rdf**: Execute SPARQL queries over a serialized RDF dataset provided as a string (useful for querying Turtle, N-Triples, or other RDF formats directly)
+
 ## Learn more
 
 This README just shows the tip of the iceberg!

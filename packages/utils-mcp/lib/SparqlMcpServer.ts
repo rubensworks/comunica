@@ -1,7 +1,7 @@
 /* eslint-disable import/no-nodejs-modules */
 import type { Writable } from 'node:stream';
 import type { QueryEngineBase } from '@comunica/actor-init-query';
-import type { IQuerySourceUnidentifiedExpanded } from '@comunica/types';
+import type { IQuerySourceSerialized, IQuerySourceUnidentifiedExpanded } from '@comunica/types';
 import type { Context, FastMCPSessionAuth } from 'fastmcp';
 import { FastMCP } from 'fastmcp';
 import { z } from 'zod';
@@ -84,6 +84,78 @@ export class SparqlMcpServer {
       },
       execute: (args, context) => this.executeQuerySparql(args, context),
     });
+
+    this.server.addTool({
+      name: 'query_sparql_rdf',
+      description: `Execute a SPARQL query over a serialized RDF dataset provided as a string. This is useful for querying RDF data that is already available as a string (e.g., Turtle, N-Triples, etc.). When sending a SELECT query, results are serialized as 'application/sparql-results+json', CONSTRUCT and DESCRIBE results are in 'application/trig', and ASK queries return true or false.`,
+      parameters: z.object({
+        query: z.string().describe('SPARQL query string'),
+        value: z.string().describe('Serialized RDF dataset as a string'),
+        mediaType: z.string().describe(`Media type of the serialized RDF dataset (e.g., 'text/turtle', 'application/n-triples', 'application/ld+json', 'application/rdf+xml', 'application/n-quads', 'application/trig')`),
+        baseIRI: z.string().optional().describe('Optional base IRI for resolving relative IRIs in the RDF dataset'),
+      }),
+      annotations: {
+        // Signals this tool uses streaming
+        streamingHint: true,
+        readOnlyHint: true,
+      },
+      execute: (args, context) => this.executeQuerySparqlRdf(args, context),
+    });
+  }
+
+  /**
+   * Execute a SPARQL query and stream the results back to the client.
+   * This method contains the common logic for executing queries and handling results.
+   * @param query The SPARQL query string
+   * @param sources Array of query sources
+   * @param queryId The query ID for logging
+   * @param context The MCP context for streaming results
+   * @returns The query results as a string or an error object
+   */
+  protected async executeQuery(
+    query: string,
+    sources: IQuerySourceUnidentifiedExpanded[],
+    queryId: number,
+    context: Context<FastMCPSessionAuth>,
+  ): Promise<any> {
+    await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
+
+    try {
+      const promises: Promise<any>[] = [];
+      const chunks: string[] = [];
+      const queryResult = await this.queryEngine.query(query, { sources });
+      const { data } = await this.queryEngine.resultToString(queryResult);
+      data.on('data', (chunk: string) => {
+        chunks.push(chunk);
+        promises.push(context.streamContent({ type: 'text', text: chunk.toString() }));
+      });
+      await new Promise((resolve, reject) => {
+        data.on('error', reject);
+        data.on('end', resolve);
+      });
+      await Promise.all(promises);
+
+      // Log successful completion
+      this.stderr.write(`[Query ${queryId}] Successfully completed\n`);
+
+      return chunks.join('');
+    } catch (error: any) {
+      // Log query failure
+      this.stderr.write(`[Query ${queryId}] Failed with error: ${error.message}\n`);
+      if (error.stack) {
+        this.stderr.write(`[Query ${queryId}] Stack trace: ${error.stack}\n`);
+      }
+
+      return {
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text: `Query failed: ${error.message}`,
+          },
+        ],
+      };
+    }
   }
 
   protected async executeQuerySparql(
@@ -101,43 +173,32 @@ export class SparqlMcpServer {
     this.stderr.write(`[Query ${currentQueryId}] Sources: ${sources.join(', ')}\n`);
     this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
 
-    await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
+    return this.executeQuery(query, parsedSources, currentQueryId, context);
+  }
 
-    try {
-      const promises: Promise<any>[] = [];
-      const chunks: string[] = [];
-      const queryResult = await this.queryEngine.query(query, { sources: parsedSources });
-      const { data } = await this.queryEngine.resultToString(queryResult);
-      data.on('data', (chunk: string) => {
-        chunks.push(chunk);
-        promises.push(context.streamContent({ type: 'text', text: chunk.toString() }));
-      });
-      await new Promise((resolve, reject) => {
-        data.on('error', reject);
-        data.on('end', resolve);
-      });
-      await Promise.all(promises);
+  protected async executeQuerySparqlRdf(
+    args: { query: string; value: string; mediaType: string; baseIRI?: string },
+    context: Context<FastMCPSessionAuth>,
+  ): Promise<any> {
+    const { query, value, mediaType, baseIRI } = args;
+    const currentQueryId = this.queryId++;
 
-      // Log successful completion
-      this.stderr.write(`[Query ${currentQueryId}] Successfully completed\n`);
+    // Create a serialized source
+    const source: IQuerySourceSerialized = {
+      type: 'serialized',
+      value,
+      mediaType,
+      ...(baseIRI && { baseIRI }),
+    };
 
-      return chunks.join('');
-    } catch (error: any) {
-      // Log query failure
-      this.stderr.write(`[Query ${currentQueryId}] Failed with error: ${error.message}\n`);
-      if (error.stack) {
-        this.stderr.write(`[Query ${currentQueryId}] Stack trace: ${error.stack}\n`);
-      }
-
-      return {
-        isError: true,
-        content: [
-          {
-            type: 'text',
-            text: `Query failed: ${error.message}`,
-          },
-        ],
-      };
+    // Log query start
+    this.stderr.write(`[Query ${currentQueryId}] Starting SPARQL query on serialized RDF\n`);
+    this.stderr.write(`[Query ${currentQueryId}] Media type: ${mediaType}\n`);
+    if (baseIRI) {
+      this.stderr.write(`[Query ${currentQueryId}] Base IRI: ${baseIRI}\n`);
     }
+    this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
+
+    return this.executeQuery(query, [ source ], currentQueryId, context);
   }
 }
