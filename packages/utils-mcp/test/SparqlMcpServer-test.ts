@@ -8,14 +8,14 @@ jest.mock('fastmcp');
 // Mock FastMCP with a factory that doesn't import the actual module
 const mockAddTool = jest.fn();
 const mockStart = jest.fn().mockResolvedValue(undefined);
-let toolExecuteCallback: any;
+let toolExecuteCallbacks: any[] = [];
 
 jest.mock<typeof import('fastmcp')>('fastmcp', () => (<any> {
   FastMCP: jest.fn().mockImplementation(() => ({
     addTool: (config: any) => {
       mockAddTool(config);
       // Capture the execute callback for testing
-      toolExecuteCallback = config.execute;
+      toolExecuteCallbacks.push(config.execute);
     },
     start: mockStart,
   })),
@@ -37,6 +37,7 @@ describe('SparqlMcpServer', () => {
     mockStart.mockClear();
     mockQueryEngine.query.mockClear();
     mockQueryEngine.resultToString.mockClear();
+    toolExecuteCallbacks = [];
 
     // Create a mock stderr stream
     stderrWrites = [];
@@ -147,14 +148,31 @@ describe('SparqlMcpServer', () => {
         },
       });
     });
+
+    it('should register query_sparql_rdf tool', () => {
+      expect(mockAddTool).toHaveBeenCalledWith({
+        name: 'query_sparql_rdf',
+        description: expect.any(String),
+        parameters: expect.any(Object),
+        execute: expect.any(Function),
+        annotations: {
+          streamingHint: true,
+          readOnlyHint: true,
+        },
+      });
+    });
   });
 
   describe('query_sparql tool logic', () => {
     let ctx: Context<FastMCPSessionAuth>;
+    let toolExecuteCallback: any;
+
     beforeEach(() => {
       ctx = <any> {
         streamContent: jest.fn(),
       };
+      // The first tool registered is query_sparql
+      toolExecuteCallback = toolExecuteCallbacks[0];
     });
 
     it('should execute query', async() => {
@@ -298,6 +316,215 @@ describe('SparqlMcpServer', () => {
       expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT *', {
         sources: [{ value: 'http://ex.org/fragments', type: 'hypermedia' }],
       });
+    });
+  });
+
+  describe('query_sparql_rdf tool logic', () => {
+    let ctx: Context<FastMCPSessionAuth>;
+    let toolExecuteCallbackRdf: any;
+
+    beforeEach(() => {
+      ctx = <any> {
+        streamContent: jest.fn(),
+      };
+      // The second tool registered is query_sparql_rdf
+      toolExecuteCallbackRdf = toolExecuteCallbacks[1];
+    });
+
+    it('should execute query on serialized RDF with required parameters', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      const result = await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<http://example.org/s> <http://example.org/p> <http://example.org/o>.',
+          mediaType: 'text/turtle',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', {
+        sources: [{
+          type: 'serialized',
+          value: '<http://example.org/s> <http://example.org/p> <http://example.org/o>.',
+          mediaType: 'text/turtle',
+        }],
+      });
+      expect(result).toBe('RESULT');
+    });
+
+    it('should execute query with baseIRI parameter', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+          baseIRI: 'http://example.org/',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', {
+        sources: [{
+          type: 'serialized',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+          baseIRI: 'http://example.org/',
+        }],
+      });
+    });
+
+    it('should handle different media types', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<http://example.org/s> <http://example.org/p> <http://example.org/o> .',
+          mediaType: 'application/n-triples',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', {
+        sources: [{
+          type: 'serialized',
+          value: '<http://example.org/s> <http://example.org/p> <http://example.org/o> .',
+          mediaType: 'application/n-triples',
+        }],
+      });
+    });
+
+    it('should handle query errors', async() => {
+      mockQueryEngine.query.mockRejectedValue(new Error('Parse error'));
+
+      const result = await toolExecuteCallbackRdf(
+        {
+          query: 'BAD QUERY',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+        },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Query failed: Parse error');
+    });
+
+    it('should log query start to stderr', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      stderrWrites = [];
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+        },
+        ctx,
+      );
+
+      const logOutput = stderrWrites.join('');
+      expect(logOutput).toContain('Starting SPARQL query on serialized RDF');
+      expect(logOutput).toContain('Media type: text/turtle');
+      expect(logOutput).toContain('Query: SELECT * WHERE { ?s ?p ?o }');
+    });
+
+    it('should log baseIRI when provided', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      stderrWrites = [];
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+          baseIRI: 'http://example.org/',
+        },
+        ctx,
+      );
+
+      const logOutput = stderrWrites.join('');
+      expect(logOutput).toContain('Base IRI: http://example.org/');
+    });
+
+    it('should log query success to stderr', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      stderrWrites = [];
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+        },
+        ctx,
+      );
+
+      const logOutput = stderrWrites.join('');
+      expect(logOutput).toContain('Successfully completed');
+    });
+
+    it('should log query failure to stderr', async() => {
+      mockQueryEngine.query.mockRejectedValue(new Error('Parse error'));
+
+      stderrWrites = [];
+      await toolExecuteCallbackRdf(
+        {
+          query: 'BAD QUERY',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+        },
+        ctx,
+      );
+
+      const logOutput = stderrWrites.join('');
+      expect(logOutput).toContain('Failed with error: Parse error');
+    });
+
+    it('should stream content correctly', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'CHUNK1', 'CHUNK2', 'CHUNK3' ]),
+      });
+
+      const result = await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+        },
+        ctx,
+      );
+
+      expect(result).toBe('CHUNK1CHUNK2CHUNK3');
+      expect(ctx.streamContent).toHaveBeenCalledWith({
+        type: 'text',
+        text: 'Streaming SPARQL query results hereafter:',
+      });
+      expect(ctx.streamContent).toHaveBeenCalledWith({ type: 'text', text: 'CHUNK1' });
+      expect(ctx.streamContent).toHaveBeenCalledWith({ type: 'text', text: 'CHUNK2' });
+      expect(ctx.streamContent).toHaveBeenCalledWith({ type: 'text', text: 'CHUNK3' });
     });
   });
 
