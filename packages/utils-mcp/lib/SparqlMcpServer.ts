@@ -8,6 +8,7 @@ import { z } from 'zod';
  */
 export class SparqlMcpServer {
   private readonly server: FastMCP;
+  // Using `any` type for stderr to avoid Components.js parsing issues with node:stream imports
   private readonly stderr: any;
   private queryId = 0;
 
