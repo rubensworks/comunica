@@ -92,7 +92,7 @@ export class SparqlMcpServer {
   }): Partial<QueryStringContext> {
     const context: Partial<QueryStringContext> = {};
 
-    if (options.queryFormatLanguage ?? options.queryFormatVersion) {
+    if (options.queryFormatLanguage !== undefined || options.queryFormatVersion !== undefined) {
       context.queryFormat = {
         language: options.queryFormatLanguage ?? 'sparql',
         version: options.queryFormatVersion ?? '1.1',
