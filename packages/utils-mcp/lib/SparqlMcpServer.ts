@@ -186,7 +186,7 @@ export class SparqlMcpServer {
     try {
       const promises: Promise<any>[] = [];
       const chunks: string[] = [];
-      const queryResult = await this.queryEngine.query(query, { sources: [ source ]});
+      const queryResult = await this.queryEngine.query(query, { sources: [source] });
       const { data } = await this.queryEngine.resultToString(queryResult);
       data.on('data', (chunk: string) => {
         chunks.push(chunk);
