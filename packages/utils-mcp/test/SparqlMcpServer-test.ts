@@ -9,6 +9,9 @@ jest.mock('fastmcp');
 const mockAddTool = jest.fn();
 const mockStart = jest.fn().mockResolvedValue(undefined);
 let toolExecuteCallbacks: any[] = [];
+const stderr = {
+  write: jest.fn(),
+};
 
 jest.mock<typeof import('fastmcp')>('fastmcp', () => (<any> {
   FastMCP: jest.fn().mockImplementation(() => ({
@@ -105,7 +108,7 @@ describe('SparqlMcpServer', () => {
         3000,
         <QueryEngineBase> <unknown> mockQueryEngine,
         '1.2.3',
-        process.stderr,
+        <any> stderr,
       );
       await defaultServer.start();
 
@@ -113,6 +116,7 @@ describe('SparqlMcpServer', () => {
       expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({
         transportType: 'httpStream',
       }));
+      expect(stderr.write).toHaveBeenCalledWith('SPARQL MCP Server listening on port 3000\n');
     });
 
     it('should log startup message to stderr in http mode', async() => {
