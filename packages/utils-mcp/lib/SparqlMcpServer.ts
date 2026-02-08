@@ -103,6 +103,61 @@ export class SparqlMcpServer {
     });
   }
 
+  /**
+   * Execute a SPARQL query and stream the results back to the client.
+   * This method contains the common logic for executing queries and handling results.
+   * @param query The SPARQL query string
+   * @param sources Array of query sources
+   * @param queryId The query ID for logging
+   * @param context The MCP context for streaming results
+   * @returns The query results as a string or an error object
+   */
+  protected async executeQuery(
+    query: string,
+    sources: IQuerySourceUnidentifiedExpanded[],
+    queryId: number,
+    context: Context<FastMCPSessionAuth>,
+  ): Promise<any> {
+    await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
+
+    try {
+      const promises: Promise<any>[] = [];
+      const chunks: string[] = [];
+      const queryResult = await this.queryEngine.query(query, { sources });
+      const { data } = await this.queryEngine.resultToString(queryResult);
+      data.on('data', (chunk: string) => {
+        chunks.push(chunk);
+        promises.push(context.streamContent({ type: 'text', text: chunk.toString() }));
+      });
+      await new Promise((resolve, reject) => {
+        data.on('error', reject);
+        data.on('end', resolve);
+      });
+      await Promise.all(promises);
+
+      // Log successful completion
+      this.stderr.write(`[Query ${queryId}] Successfully completed\n`);
+
+      return chunks.join('');
+    } catch (error: any) {
+      // Log query failure
+      this.stderr.write(`[Query ${queryId}] Failed with error: ${error.message}\n`);
+      if (error.stack) {
+        this.stderr.write(`[Query ${queryId}] Stack trace: ${error.stack}\n`);
+      }
+
+      return {
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text: `Query failed: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
   protected async executeQuerySparql(
     args: { query: string; sources: string[] },
     context: Context<FastMCPSessionAuth>,
@@ -118,44 +173,7 @@ export class SparqlMcpServer {
     this.stderr.write(`[Query ${currentQueryId}] Sources: ${sources.join(', ')}\n`);
     this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
 
-    await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
-
-    try {
-      const promises: Promise<any>[] = [];
-      const chunks: string[] = [];
-      const queryResult = await this.queryEngine.query(query, { sources: parsedSources });
-      const { data } = await this.queryEngine.resultToString(queryResult);
-      data.on('data', (chunk: string) => {
-        chunks.push(chunk);
-        promises.push(context.streamContent({ type: 'text', text: chunk.toString() }));
-      });
-      await new Promise((resolve, reject) => {
-        data.on('error', reject);
-        data.on('end', resolve);
-      });
-      await Promise.all(promises);
-
-      // Log successful completion
-      this.stderr.write(`[Query ${currentQueryId}] Successfully completed\n`);
-
-      return chunks.join('');
-    } catch (error: any) {
-      // Log query failure
-      this.stderr.write(`[Query ${currentQueryId}] Failed with error: ${error.message}\n`);
-      if (error.stack) {
-        this.stderr.write(`[Query ${currentQueryId}] Stack trace: ${error.stack}\n`);
-      }
-
-      return {
-        isError: true,
-        content: [
-          {
-            type: 'text',
-            text: `Query failed: ${error.message}`,
-          },
-        ],
-      };
-    }
+    return this.executeQuery(query, parsedSources, currentQueryId, context);
   }
 
   protected async executeQuerySparqlRdf(
@@ -181,43 +199,6 @@ export class SparqlMcpServer {
     }
     this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
 
-    await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
-
-    try {
-      const promises: Promise<any>[] = [];
-      const chunks: string[] = [];
-      const queryResult = await this.queryEngine.query(query, { sources: [source] });
-      const { data } = await this.queryEngine.resultToString(queryResult);
-      data.on('data', (chunk: string) => {
-        chunks.push(chunk);
-        promises.push(context.streamContent({ type: 'text', text: chunk.toString() }));
-      });
-      await new Promise((resolve, reject) => {
-        data.on('error', reject);
-        data.on('end', resolve);
-      });
-      await Promise.all(promises);
-
-      // Log successful completion
-      this.stderr.write(`[Query ${currentQueryId}] Successfully completed\n`);
-
-      return chunks.join('');
-    } catch (error: any) {
-      // Log query failure
-      this.stderr.write(`[Query ${currentQueryId}] Failed with error: ${error.message}\n`);
-      if (error.stack) {
-        this.stderr.write(`[Query ${currentQueryId}] Stack trace: ${error.stack}\n`);
-      }
-
-      return {
-        isError: true,
-        content: [
-          {
-            type: 'text',
-            text: `Query failed: ${error.message}`,
-          },
-        ],
-      };
-    }
+    return this.executeQuery(query, [ source ], currentQueryId, context);
   }
 }
