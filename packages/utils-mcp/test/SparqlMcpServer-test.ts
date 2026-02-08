@@ -360,7 +360,7 @@ describe('SparqlMcpServer', () => {
       expect(result).toBe('RESULT');
     });
 
-    it('should execute query with baseIRI parameter', async() => {
+    it('should execute query with fileBaseIRI parameter', async() => {
       mockQueryEngine.query.mockResolvedValue({});
       mockQueryEngine.resultToString.mockResolvedValue({
         data: Readable.from([ 'RESULT' ]),
@@ -371,7 +371,7 @@ describe('SparqlMcpServer', () => {
           query: 'SELECT * WHERE { ?s ?p ?o }',
           value: '<s> <p> <o>.',
           mediaType: 'text/turtle',
-          baseIRI: 'http://example.org/',
+          fileBaseIRI: 'http://example.org/',
         },
         ctx,
       );
@@ -448,7 +448,7 @@ describe('SparqlMcpServer', () => {
       expect(logOutput).toContain('Query: SELECT * WHERE { ?s ?p ?o }');
     });
 
-    it('should log baseIRI when provided', async() => {
+    it('should log fileBaseIRI when provided', async() => {
       mockQueryEngine.query.mockResolvedValue({});
       mockQueryEngine.resultToString.mockResolvedValue({
         data: Readable.from([ 'RESULT' ]),
@@ -460,13 +460,13 @@ describe('SparqlMcpServer', () => {
           query: 'SELECT * WHERE { ?s ?p ?o }',
           value: '<s> <p> <o>.',
           mediaType: 'text/turtle',
-          baseIRI: 'http://example.org/',
+          fileBaseIRI: 'http://example.org/',
         },
         ctx,
       );
 
       const logOutput = stderrWrites.join('');
-      expect(logOutput).toContain('Base IRI: http://example.org/');
+      expect(logOutput).toContain('File Base IRI: http://example.org/');
     });
 
     it('should log query success to stderr', async() => {
@@ -834,7 +834,7 @@ describe('SparqlMcpServer', () => {
       }));
     });
 
-    it('should pass both baseIRI and queryFormat to query engine', async() => {
+    it('should pass baseIRI to query engine context', async() => {
       mockQueryEngine.query.mockResolvedValue({});
       mockQueryEngine.resultToString.mockResolvedValue({
         data: Readable.from([ 'RESULT' ]),
@@ -845,18 +845,41 @@ describe('SparqlMcpServer', () => {
           query: 'SELECT * WHERE { ?s ?p ?o }',
           value: '<s> <p> <o>.',
           mediaType: 'text/turtle',
-          baseIRI: 'http://example.org/',
+          baseIRI: 'http://query.example.org/',
+        },
+        ctx,
+      );
+
+      expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', expect.objectContaining({
+        baseIRI: 'http://query.example.org/',
+      }));
+    });
+
+    it('should pass fileBaseIRI, baseIRI and queryFormat to query engine', async() => {
+      mockQueryEngine.query.mockResolvedValue({});
+      mockQueryEngine.resultToString.mockResolvedValue({
+        data: Readable.from([ 'RESULT' ]),
+      });
+
+      await toolExecuteCallbackRdf(
+        {
+          query: 'SELECT * WHERE { ?s ?p ?o }',
+          value: '<s> <p> <o>.',
+          mediaType: 'text/turtle',
+          fileBaseIRI: 'http://example.org/',
+          baseIRI: 'http://query.example.org/',
           queryFormatLanguage: 'sparql',
           queryFormatVersion: '1.2',
         },
         ctx,
       );
 
-      // BaseIRI should be in the source, not in the context for query_sparql_rdf
+      // FileBaseIRI should be in the source, baseIRI should be in the context
       expect(mockQueryEngine.query).toHaveBeenCalledWith('SELECT * WHERE { ?s ?p ?o }', expect.objectContaining({
         sources: [ expect.objectContaining({
           baseIRI: 'http://example.org/',
         }) ],
+        baseIRI: 'http://query.example.org/',
         queryFormat: { language: 'sparql', version: '1.2' },
       }));
     });

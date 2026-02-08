@@ -124,14 +124,27 @@ export class SparqlMcpServer {
   }
 
   protected registerTools(): void {
+    // Common query format parameters shared between tools
+    const queryFormatParams = {
+      queryFormatLanguage: z.string().optional()
+        .describe(
+          'Query language (e.g., sparql, graphql). ' +
+          'Allows you to specify alternative query languages supported by Comunica',
+        ),
+      queryFormatVersion: z.string().optional()
+        .describe(
+          'Query language version (e.g., 1.0, 1.1, 1.2). ' +
+          'Specifies the version of the query language to use',
+        ),
+    };
+
     this.server.addTool({
       name: 'query_sparql',
       description: `Execute a SPARQL query over one or more sources. When sending a SELECT query, results are serialized as 'application/sparql-results+json', CONSTRUCT and DESCRIBE results are in 'application/trig', and ASK queries return true or false. Update queries (INSERT/DELETE) can also be passed, which in most cases will only work on private Knowledge Graphs or by passing authentication.`,
       parameters: z.object({
         query: z.string().describe('SPARQL query string'),
         sources: z.array(z.string()).describe(`List of SPARQL endpoint URLs, TPF interface URLs, or Linked Data (RDF) file paths. You can optionally force a source type by prefixing the URL with a type annotation (e.g., 'sparql@https://example.org/sparql', 'file@/path/to/file.ttl', 'hypermedia@https://example.org/'). This is useful when the source type is already known to avoid auto-detection overhead.`),
-        queryFormatLanguage: z.string().optional().describe('Query language (e.g., sparql)'),
-        queryFormatVersion: z.string().optional().describe('Query language version (e.g., 1.0, 1.1, 1.2)'),
+        ...queryFormatParams,
         baseIRI: z.string().optional().describe('Base IRI for resolving relative IRIs in the query'),
         httpProxy: z.string().optional().describe('HTTP proxy URL (e.g., http://proxy.example.com:8080)'),
         httpAuth: z.string().optional().describe('HTTP basic authentication in the format username:password'),
@@ -153,9 +166,9 @@ export class SparqlMcpServer {
         query: z.string().describe('SPARQL query string'),
         value: z.string().describe('Serialized RDF dataset as a string'),
         mediaType: z.string().describe(`Media type of the serialized RDF dataset (e.g., 'text/turtle', 'application/n-triples', 'application/ld+json', 'application/rdf+xml', 'application/n-quads', 'application/trig')`),
-        baseIRI: z.string().optional().describe('Optional base IRI for resolving relative IRIs in the RDF dataset'),
-        queryFormatLanguage: z.string().optional().describe('Query language (e.g., sparql)'),
-        queryFormatVersion: z.string().optional().describe('Query language version (e.g., 1.0, 1.1, 1.2)'),
+        fileBaseIRI: z.string().optional().describe('Base IRI for resolving relative IRIs in the RDF dataset'),
+        baseIRI: z.string().optional().describe('Base IRI for resolving relative IRIs in the query'),
+        ...queryFormatParams,
       }),
       annotations: {
         // Signals this tool uses streaming
@@ -277,6 +290,7 @@ export class SparqlMcpServer {
       query: string;
       value: string;
       mediaType: string;
+      fileBaseIRI?: string;
       baseIRI?: string;
       queryFormatLanguage?: string;
       queryFormatVersion?: string;
@@ -287,6 +301,7 @@ export class SparqlMcpServer {
       query,
       value,
       mediaType,
+      fileBaseIRI,
       baseIRI,
       queryFormatLanguage,
       queryFormatVersion,
@@ -298,20 +313,24 @@ export class SparqlMcpServer {
       type: 'serialized',
       value,
       mediaType,
-      ...(baseIRI && { baseIRI }),
+      ...(fileBaseIRI && { baseIRI: fileBaseIRI }),
     };
 
-    // Build query context from optional parameters (don't include baseIRI here as it's in the source)
+    // Build query context from optional parameters
     const queryContext = this.buildQueryContext({
       queryFormatLanguage,
       queryFormatVersion,
+      baseIRI,
     });
 
     // Log query start
     this.stderr.write(`[Query ${currentQueryId}] Starting SPARQL query on serialized RDF\n`);
     this.stderr.write(`[Query ${currentQueryId}] Media type: ${mediaType}\n`);
+    if (fileBaseIRI) {
+      this.stderr.write(`[Query ${currentQueryId}] File Base IRI: ${fileBaseIRI}\n`);
+    }
     if (baseIRI) {
-      this.stderr.write(`[Query ${currentQueryId}] Base IRI: ${baseIRI}\n`);
+      this.stderr.write(`[Query ${currentQueryId}] Query Base IRI: ${baseIRI}\n`);
     }
     this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
 

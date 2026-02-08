@@ -107,8 +107,8 @@ Execute SPARQL queries over one or more remote sources (SPARQL endpoints, TPF in
 **Parameters:**
 - `query` (required): SPARQL query string
 - `sources` (required): List of SPARQL endpoint URLs, TPF interface URLs, or Linked Data (RDF) file paths
-- `queryFormatLanguage` (optional): Query language (e.g., `sparql`)
-- `queryFormatVersion` (optional): Query language version (e.g., `1.0`, `1.1`, `1.2`)
+- `queryFormatLanguage` (optional): Query language (e.g., `sparql`, `graphql`). Allows you to specify alternative query languages supported by Comunica
+- `queryFormatVersion` (optional): Query language version (e.g., `1.0`, `1.1`, `1.2`). Specifies the version of the query language to use
 - `baseIRI` (optional): Base IRI for resolving relative IRIs in the query
 - `httpProxy` (optional): HTTP proxy URL (e.g., `http://proxy.example.com:8080`)
 - `httpAuth` (optional): HTTP basic authentication in the format `username:password`
@@ -123,9 +123,10 @@ Execute SPARQL queries over a serialized RDF dataset provided as a string (usefu
 - `query` (required): SPARQL query string
 - `value` (required): Serialized RDF dataset as a string
 - `mediaType` (required): Media type of the serialized RDF dataset (e.g., `text/turtle`, `application/n-triples`, `application/ld+json`)
-- `baseIRI` (optional): Base IRI for resolving relative IRIs in the RDF dataset
-- `queryFormatLanguage` (optional): Query language (e.g., `sparql`)
-- `queryFormatVersion` (optional): Query language version (e.g., `1.0`, `1.1`, `1.2`)
+- `fileBaseIRI` (optional): Base IRI for resolving relative IRIs in the RDF dataset
+- `baseIRI` (optional): Base IRI for resolving relative IRIs in the query
+- `queryFormatLanguage` (optional): Query language (e.g., `sparql`, `graphql`). Allows you to specify alternative query languages supported by Comunica
+- `queryFormatVersion` (optional): Query language version (e.g., `1.0`, `1.1`, `1.2`). Specifies the version of the query language to use
 
 ## Learn more
 
