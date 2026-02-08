@@ -1,7 +1,7 @@
 /* eslint-disable import/no-nodejs-modules */
 import type { Writable } from 'node:stream';
 import type { QueryEngineBase } from '@comunica/actor-init-query';
-import type { IQuerySourceSerialized, IQuerySourceUnidentifiedExpanded } from '@comunica/types';
+import type { IQuerySourceSerialized, IQuerySourceUnidentifiedExpanded, QueryStringContext } from '@comunica/types';
 import type { Context, FastMCPSessionAuth } from 'fastmcp';
 import { FastMCP } from 'fastmcp';
 import { z } from 'zod';
@@ -69,6 +69,60 @@ export class SparqlMcpServer {
     return source;
   }
 
+  /**
+   * Build a query context from optional parameters.
+   * @param options Optional parameters for the query context
+   * @param options.queryFormatLanguage The query language (e.g., 'sparql')
+   * @param options.queryFormatVersion The query language version (e.g., '1.1')
+   * @param options.baseIRI Base IRI for resolving relative IRIs
+   * @param options.httpProxy HTTP proxy URL
+   * @param options.httpAuth HTTP basic authentication credentials
+   * @param options.httpTimeout HTTP request timeout in milliseconds
+   * @param options.httpRetryCount Number of HTTP request retries
+   * @returns A partial query context object
+   */
+  protected buildQueryContext(options: {
+    queryFormatLanguage?: string;
+    queryFormatVersion?: string;
+    baseIRI?: string;
+    httpProxy?: string;
+    httpAuth?: string;
+    httpTimeout?: number;
+    httpRetryCount?: number;
+  }): Partial<QueryStringContext> {
+    const context: Partial<QueryStringContext> = {};
+
+    if (options.queryFormatLanguage ?? options.queryFormatVersion) {
+      context.queryFormat = {
+        language: options.queryFormatLanguage ?? 'sparql',
+        version: options.queryFormatVersion ?? '1.1',
+      };
+    }
+    if (options.baseIRI) {
+      context.baseIRI = options.baseIRI;
+    }
+    if (options.httpProxy) {
+      const proxyUrl = options.httpProxy;
+      context.httpProxyHandler = {
+        getProxy: async(request): Promise<any> => ({
+          input: proxyUrl,
+          init: request.init,
+        }),
+      };
+    }
+    if (options.httpAuth) {
+      context.httpAuth = options.httpAuth;
+    }
+    if (options.httpTimeout !== undefined) {
+      context.httpTimeout = options.httpTimeout;
+    }
+    if (options.httpRetryCount !== undefined) {
+      context.httpRetryCount = options.httpRetryCount;
+    }
+
+    return context;
+  }
+
   protected registerTools(): void {
     this.server.addTool({
       name: 'query_sparql',
@@ -76,6 +130,13 @@ export class SparqlMcpServer {
       parameters: z.object({
         query: z.string().describe('SPARQL query string'),
         sources: z.array(z.string()).describe(`List of SPARQL endpoint URLs, TPF interface URLs, or Linked Data (RDF) file paths. You can optionally force a source type by prefixing the URL with a type annotation (e.g., 'sparql@https://example.org/sparql', 'file@/path/to/file.ttl', 'hypermedia@https://example.org/'). This is useful when the source type is already known to avoid auto-detection overhead.`),
+        queryFormatLanguage: z.string().optional().describe('Query language (e.g., sparql)'),
+        queryFormatVersion: z.string().optional().describe('Query language version (e.g., 1.0, 1.1, 1.2)'),
+        baseIRI: z.string().optional().describe('Base IRI for resolving relative IRIs in the query'),
+        httpProxy: z.string().optional().describe('HTTP proxy URL (e.g., http://proxy.example.com:8080)'),
+        httpAuth: z.string().optional().describe('HTTP basic authentication in the format username:password'),
+        httpTimeout: z.number().optional().describe('HTTP request timeout in milliseconds'),
+        httpRetryCount: z.number().optional().describe('Number of HTTP request retries on failure'),
       }),
       annotations: {
         // Signals this tool uses streaming
@@ -93,6 +154,8 @@ export class SparqlMcpServer {
         value: z.string().describe('Serialized RDF dataset as a string'),
         mediaType: z.string().describe(`Media type of the serialized RDF dataset (e.g., 'text/turtle', 'application/n-triples', 'application/ld+json', 'application/rdf+xml', 'application/n-quads', 'application/trig')`),
         baseIRI: z.string().optional().describe('Optional base IRI for resolving relative IRIs in the RDF dataset'),
+        queryFormatLanguage: z.string().optional().describe('Query language (e.g., sparql)'),
+        queryFormatVersion: z.string().optional().describe('Query language version (e.g., 1.0, 1.1, 1.2)'),
       }),
       annotations: {
         // Signals this tool uses streaming
@@ -110,6 +173,7 @@ export class SparqlMcpServer {
    * @param sources Array of query sources
    * @param queryId The query ID for logging
    * @param context The MCP context for streaming results
+   * @param queryContext Optional query context parameters
    * @returns The query results as a string or an error object
    */
   protected async executeQuery(
@@ -117,13 +181,14 @@ export class SparqlMcpServer {
     sources: IQuerySourceUnidentifiedExpanded[],
     queryId: number,
     context: Context<FastMCPSessionAuth>,
+    queryContext: Partial<QueryStringContext> = {},
   ): Promise<any> {
     await context.streamContent({ type: 'text', text: `Streaming SPARQL query results hereafter:` });
 
     try {
       const promises: Promise<any>[] = [];
       const chunks: string[] = [];
-      const queryResult = await this.queryEngine.query(query, { sources });
+      const queryResult = await this.queryEngine.query(query, { sources, ...queryContext });
       const { data } = await this.queryEngine.resultToString(queryResult);
       data.on('data', (chunk: string) => {
         chunks.push(chunk);
@@ -159,28 +224,73 @@ export class SparqlMcpServer {
   }
 
   protected async executeQuerySparql(
-    args: { query: string; sources: string[] },
+    args: {
+      query: string;
+      sources: string[];
+      queryFormatLanguage?: string;
+      queryFormatVersion?: string;
+      baseIRI?: string;
+      httpProxy?: string;
+      httpAuth?: string;
+      httpTimeout?: number;
+      httpRetryCount?: number;
+    },
     context: Context<FastMCPSessionAuth>,
   ): Promise<any> {
-    const { query, sources } = args;
+    const {
+      query,
+      sources,
+      queryFormatLanguage,
+      queryFormatVersion,
+      baseIRI,
+      httpProxy,
+      httpAuth,
+      httpTimeout,
+      httpRetryCount,
+    } = args;
     const currentQueryId = this.queryId++;
 
     // Parse sources to extract type annotations
     const parsedSources = sources.map(sourceString => this.parseSourceString(sourceString));
+
+    // Build query context from optional parameters
+    const queryContext = this.buildQueryContext({
+      queryFormatLanguage,
+      queryFormatVersion,
+      baseIRI,
+      httpProxy,
+      httpAuth,
+      httpTimeout,
+      httpRetryCount,
+    });
 
     // Log query start
     this.stderr.write(`[Query ${currentQueryId}] Starting SPARQL query\n`);
     this.stderr.write(`[Query ${currentQueryId}] Sources: ${sources.join(', ')}\n`);
     this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
 
-    return this.executeQuery(query, parsedSources, currentQueryId, context);
+    return this.executeQuery(query, parsedSources, currentQueryId, context, queryContext);
   }
 
   protected async executeQuerySparqlRdf(
-    args: { query: string; value: string; mediaType: string; baseIRI?: string },
+    args: {
+      query: string;
+      value: string;
+      mediaType: string;
+      baseIRI?: string;
+      queryFormatLanguage?: string;
+      queryFormatVersion?: string;
+    },
     context: Context<FastMCPSessionAuth>,
   ): Promise<any> {
-    const { query, value, mediaType, baseIRI } = args;
+    const {
+      query,
+      value,
+      mediaType,
+      baseIRI,
+      queryFormatLanguage,
+      queryFormatVersion,
+    } = args;
     const currentQueryId = this.queryId++;
 
     // Create a serialized source
@@ -191,6 +301,12 @@ export class SparqlMcpServer {
       ...(baseIRI && { baseIRI }),
     };
 
+    // Build query context from optional parameters (don't include baseIRI here as it's in the source)
+    const queryContext = this.buildQueryContext({
+      queryFormatLanguage,
+      queryFormatVersion,
+    });
+
     // Log query start
     this.stderr.write(`[Query ${currentQueryId}] Starting SPARQL query on serialized RDF\n`);
     this.stderr.write(`[Query ${currentQueryId}] Media type: ${mediaType}\n`);
@@ -199,6 +315,6 @@ export class SparqlMcpServer {
     }
     this.stderr.write(`[Query ${currentQueryId}] Query: ${query}\n`);
 
-    return this.executeQuery(query, [ source ], currentQueryId, context);
+    return this.executeQuery(query, [ source ], currentQueryId, context, queryContext);
   }
 }
