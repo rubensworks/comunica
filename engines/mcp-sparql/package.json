@@ -1,0 +1,58 @@
+{
+  "name": "@comunica/mcp-sparql",
+  "version": "5.1.3",
+  "description": "An MCP server for executing SPARQL queries over decentralized RDF knowledge graphs on the Web",
+  "license": "MIT",
+  "funding": {
+    "type": "opencollective",
+    "url": "https://opencollective.com/comunica-association"
+  },
+  "homepage": "https://comunica.dev/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/comunica/comunica.git",
+    "directory": "engines/mcp-sparql"
+  },
+  "bugs": {
+    "url": "https://github.com/comunica/comunica/issues"
+  },
+  "keywords": [
+    "mcp",
+    "agentic",
+    "comunica",
+    "sparql",
+    "engine",
+    "query",
+    "update",
+    "sparql engine",
+    "sparql query",
+    "sparql update",
+    "sparql 1.1",
+    "sparql 1.2"
+  ],
+  "sideEffects": false,
+  "main": "lib/index.js",
+  "typings": "lib/index",
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "comunica-mcp-sparql": "bin/mcp.js"
+  },
+  "files": [
+    "bin/**/*.d.ts",
+    "bin/**/*.js",
+    "bin/**/*.js.map",
+    "lib/**/*.d.ts",
+    "lib/**/*.js",
+    "lib/**/*.js.map"
+  ],
+  "scripts": {
+    "build": "yarn run build:ts",
+    "build:ts": "node \"../../node_modules/typescript/bin/tsc\""
+  },
+  "dependencies": {
+    "@comunica/query-sparql": "^5.1.3",
+    "@comunica/utils-mcp": "^5.1.3"
+  }
+}

@@ -32,7 +32,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION_LOWEST }}
           cache: yarn
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
       - name: Build TypeScript with esModuleInterop flag
         run: yarn run build:ts --esModuleInterop true
       - name: Run linter
@@ -67,7 +67,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: yarn
       - name: Install dependencies and build
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
       - name: Run tests
         run: yarn run test:ci
       - name: Submit coverage results
@@ -103,7 +103,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: yarn
       - name: Install dependencies and build
-        run: yarn install --frozen-lockfile --network-timeout 36000
+        run: yarn install --frozen-lockfile --network-timeout 36000 --ignore-engines
       - name: Load RDF test suite cache
         uses: actions/cache@v5
         with:
@@ -147,7 +147,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION_LOWEST }}
           cache: yarn
       - name: Install dependencies and build
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
       - name: Install ${{ matrix.browser }} via Playwright
         if: startsWith(matrix.browser, 'Webkit')
         # The @L will convert 'Webkit' into lowercase 'webkit' which is the name Playwright expects.
@@ -193,7 +193,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION_LOWEST }}
           cache: yarn
       - name: Install dependencies and build
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
       - name: Build browser bundles
         run: yarn run build:browser
       - name: Deploy browser builds
@@ -221,7 +221,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION_LOWEST }}
           cache: yarn
       - name: Install dependencies and build monorepo
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
       - name: Install Lerna Docker
         run: sh -c "`curl -fsSl https://raw.githubusercontent.com/rubensworks/lerna-docker/master/install.sh`"
       - name: Build Docker images
@@ -265,7 +265,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION_HIGHEST }}
           cache: yarn
       - name: Install dependencies and build monorepo
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
       - name: Run benchmarks
         run: cd performance/benchmark-${{ matrix.benchmark }}/ && yarn run performance:ci
       - uses: actions/upload-artifact@v6
@@ -372,7 +372,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION_LOWEST }}
           cache: yarn
       - name: Install dependencies
-        run: yarn install --ignore-scripts --frozen-lockfile
+        run: yarn install --ignore-scripts --frozen-lockfile --ignore-engines
       - name: Build documentation
         run: yarn run doc
       - name: Prepare artifact

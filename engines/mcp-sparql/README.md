@@ -1,0 +1,73 @@
+# Comunica SPARQL
+
+[![npm version](https://badge.fury.io/js/%40comunica%2Fmcp-sparql.svg)](https://www.npmjs.com/package/@comunica/mcp-sparql)
+
+Comunica MCP SPARQL is an MCP server for executing SPARQL queries over decentralized RDF knowledge graphs on the Web.
+
+It's main distinguishing features are the following:
+
+* Execute [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) queries over one or more knowledge graphs on the Web.
+* Federated querying over [heterogeneous interfaces](https://comunica.dev/docs/query/advanced/source_types/), such as RDF files, SPARQL endpoints, [Triple Pattern Fragments](https://linkeddatafragments.org/), or [Solid data pods](https://inrupt.com/solid).
+
+**[Learn more about Comunica on our website](https://comunica.dev/).**
+
+_Internally, this is a [Comunica module](https://comunica.dev/) that is configured with modules to execute SPARQL queries._
+
+## Supported by
+
+Comunica is a community-driven project, sustained by the [Comunica Association](https://comunica.dev/association/).
+If you are using Comunica, [becoming a sponsor or member](https://opencollective.com/comunica-association) is a way to make Comunica sustainable in the long-term.
+
+Our top sponsors are shown below!
+
+<a href="https://opencollective.com/comunica-association/sponsor/0/website" target="_blank"><img src="https://opencollective.com/comunica-association/sponsor/0/avatar.svg"></a>
+<a href="https://opencollective.com/comunica-association/sponsor/1/website" target="_blank"><img src="https://opencollective.com/comunica-association/sponsor/1/avatar.svg"></a>
+<a href="https://opencollective.com/comunica-association/sponsor/2/website" target="_blank"><img src="https://opencollective.com/comunica-association/sponsor/2/avatar.svg"></a>
+<a href="https://opencollective.com/comunica-association/sponsor/3/website" target="_blank"><img src="https://opencollective.com/comunica-association/sponsor/3/avatar.svg"></a>
+
+## Installation
+
+Comunica requires [Node.JS](http://nodejs.org/) 14.0 or higher and is tested on OSX and Linux.
+
+The easiest way to install the client is by installing it from NPM as follows:
+
+```bash
+$ [sudo] npm install -g @comunica/mcp-sparql
+```
+
+Alternatively, you can install from the latest GitHub sources.
+For this, please refer to the README of the [Comunica monorepo](https://github.com/comunica/comunica).
+
+## Connect this MCP server to your agent
+
+### Claude Desktop
+
+After installing, you can run `comunica-mcp-sparql` from the command line.
+Then, add the following entry to your `claude_desktop_config.json` file (can be found via Settings / Developer / Edit Config):
+
+```json
+{
+  "mcpServers": {
+    "sparql": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:3123/mcp",
+        "--allow-http"
+      ]
+    }
+  }
+}
+```
+
+Then, you can ask Claude something like the following:
+
+> Use SPARQL to determine what movies both Brad Pitt and Leonardo DiCaprio both play in.
+
+## Learn more
+
+This README just shows the tip of the iceberg!
+Learn more about Comunica's functionalities in the following guides:
+
+* _[*Full documentation*](https://comunica.dev/docs/)_
