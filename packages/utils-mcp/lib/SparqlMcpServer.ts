@@ -10,6 +10,7 @@ export class SparqlMcpServer {
   private readonly server: FastMCP;
 
   public constructor(
+    private readonly mode: 'stdio' | 'http',
     private readonly port: number,
     private readonly queryEngine: QueryEngineBase,
     version: string,
@@ -23,18 +24,26 @@ export class SparqlMcpServer {
   }
 
   /**
-   * Start the MCP server over HTTP stream.
+   * Start the MCP server in the configured mode (stdio or HTTP stream).
    */
   public async start(): Promise<void> {
-    await this.server.start({
-      transportType: 'httpStream',
-      httpStream: {
-        port: this.port,
-        stateless: true,
-      },
-    });
-    // eslint-disable-next-line no-console
-    console.error(`SPARQL MCP Server listening on port ${this.port}`);
+    if (this.mode === 'stdio') {
+      await this.server.start({
+        transportType: 'stdio',
+      });
+      // eslint-disable-next-line no-console
+      console.error(`SPARQL MCP Server running in stdio mode`);
+    } else {
+      await this.server.start({
+        transportType: 'httpStream',
+        httpStream: {
+          port: this.port,
+          stateless: true,
+        },
+      });
+      // eslint-disable-next-line no-console
+      console.error(`SPARQL MCP Server listening on port ${this.port}`);
+    }
   }
 
   protected registerTools(): void {
