@@ -38,6 +38,7 @@ $ [sudo] npm install -g @comunica/mcp-sparql-file
 
 Alternatively, you can install from the latest GitHub sources.
 For this, please refer to the README of the [Comunica monorepo](https://github.com/comunica/comunica).
+If you do so, the following examples require replacing `comunica-mcp-sparql-file` with `node engines/mcp-sparql-file/bin/mcp.js`.
 
 ## Connect this MCP server to your agent
 
@@ -96,6 +97,41 @@ Then, add the following entry to your `claude_desktop_config.json`:
 Then, you can ask Claude something like the following:
 
 > Use SPARQL to query this local RDF file: file:///path/to/data.ttl
+
+## Claude Code
+
+#### Stdio Mode (Recommended for Claude Code)
+
+With stdio mode, the MCP server communicates directly via standard input/output, which is simpler and doesn't require a network port.
+
+```bash
+claude mcp add --transport stdio sparql -- npx -y @comunica/mcp-sparql-file --mode stdio
+```
+
+Learn more in the [Claude Code MCP docs](https://code.claude.com/docs/en/mcp),
+such as for running this on Windows.
+
+#### HTTP Mode
+
+Alternatively, you can run the MCP server in HTTP mode, which requires starting the server manually first:
+
+```bash
+$ comunica-mcp-sparql-file --mode http --port 3123
+```
+
+```bash
+claude mcp add --transport http sparql http://localhost:3123/mcp
+```
+
+## ChatGPT
+
+At the time of writing, ChatGPT only supports HTTP-based MCP servers.
+So you'll need to run this tool under HTTP mode and expose it to the public Web,
+possibly combined with a reverse proxy and/or OAuth layer.
+
+```bash
+$ comunica-mcp-sparql-file --mode http --port 3123
+```
 
 ## Available Tools
 
